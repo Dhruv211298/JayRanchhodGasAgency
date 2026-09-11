@@ -4,7 +4,7 @@
   "private": true,
   "description": "Jay Ranchhod Gas Service - Daily LPG Management System",
   "scripts": {
-    "build": "cd app && npm install && npm run build",
+    "build": "cd app && npm install --include=dev && npm run build",
     "start": "node backend/server.js",
     "dev:backend": "cd backend && npm start",
     "dev:frontend": "cd app && npm run dev",
