@@ -3,15 +3,9 @@
  * init-db.js — One-command cloud database initialization for Aiven MySQL
  * 
  * Usage:
+ *   node backend/scripts/init-db.js "mysql://avnadmin:password@host:port/defaultdb?ssl-mode=REQUIRED"
+ *   OR with environment variables:
  *   node backend/scripts/init-db.js
- * 
- * Environment Variables (set before running):
- *   DB_HOST     - Aiven host (e.g. mysql-xxxxx.aivencloud.com)
- *   DB_PORT     - Aiven port (e.g. 12345)
- *   DB_USER     - Aiven username (e.g. avnadmin)
- *   DB_PASSWORD - Aiven password
- *   DB_NAME     - Database name (default: defaultdb)
- *   DB_SSL      - true (automatically enabled for aivencloud.com)
  */
 
 const fs = require('fs');
@@ -19,22 +13,47 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
 
-const isAiven = (process.env.DB_HOST || '').includes('aivencloud.com');
-const ssl = process.env.DB_SSL === 'true' || isAiven ? { rejectUnauthorized: false } : false;
-
 async function init() {
-  console.log('────────────────────────────────────────────────────────────────');
-  console.log('🚀 Connecting to MySQL Database...');
-  console.log(`   Host: ${process.env.DB_HOST || '127.0.0.1'}`);
-  console.log(`   Port: ${process.env.DB_PORT || 3306}`);
-  console.log(`   User: ${process.env.DB_USER || 'root'}`);
-  console.log(`   Database: ${process.env.DB_NAME || 'defaultdb'}`);
-  console.log(`   SSL: ${ssl ? 'Enabled (Aiven)' : 'Disabled'}`);
-  console.log('────────────────────────────────────────────────────────────────');
+  const arg = process.argv[2];
+  let connectionConfig;
 
-  let connection;
-  try {
-    connection = await mysql.createConnection({
+  if (arg && arg.startsWith('mysql://')) {
+    try {
+      const url = new URL(arg);
+      connectionConfig = {
+        host: url.hostname,
+        port: parseInt(url.port) || 3306,
+        user: decodeURIComponent(url.username || 'avnadmin'),
+        password: decodeURIComponent(url.password || ''),
+        database: url.pathname.replace(/^\//, '') || 'defaultdb',
+        ssl: { rejectUnauthorized: false },
+        multipleStatements: true
+      };
+    } catch (e) {
+      console.error('Invalid MySQL URI:', e.message);
+      process.exit(1);
+    }
+  } else if (process.env.MYSQL_URI || process.env.DATABASE_URL) {
+    const uri = process.env.MYSQL_URI || process.env.DATABASE_URL;
+    try {
+      const url = new URL(uri);
+      connectionConfig = {
+        host: url.hostname,
+        port: parseInt(url.port) || 3306,
+        user: decodeURIComponent(url.username || 'avnadmin'),
+        password: decodeURIComponent(url.password || ''),
+        database: url.pathname.replace(/^\//, '') || 'defaultdb',
+        ssl: { rejectUnauthorized: false },
+        multipleStatements: true
+      };
+    } catch (e) {
+      console.error('Invalid MySQL URI:', e.message);
+      process.exit(1);
+    }
+  } else {
+    const isAiven = (process.env.DB_HOST || '').includes('aivencloud.com');
+    const ssl = process.env.DB_SSL === 'true' || isAiven ? { rejectUnauthorized: false } : false;
+    connectionConfig = {
       host: process.env.DB_HOST || '127.0.0.1',
       user: process.env.DB_USER || 'root',
       password: process.env.DB_PASSWORD || '',
@@ -42,9 +61,22 @@ async function init() {
       port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 3306,
       ssl,
       multipleStatements: true
-    });
+    };
+  }
 
-    console.log('✅ Connected successfully!');
+  console.log('────────────────────────────────────────────────────────────────');
+  console.log('🚀 Connecting to MySQL Database...');
+  console.log(`   Host: ${connectionConfig.host}`);
+  console.log(`   Port: ${connectionConfig.port}`);
+  console.log(`   User: ${connectionConfig.user}`);
+  console.log(`   Database: ${connectionConfig.database}`);
+  console.log(`   SSL: ${connectionConfig.ssl ? 'Enabled' : 'Disabled'}`);
+  console.log('────────────────────────────────────────────────────────────────');
+
+  let connection;
+  try {
+    connection = await mysql.createConnection(connectionConfig);
+    console.log('✅ Connected successfully to Aiven database!');
 
     // Read and run init_aiven.sql
     const sqlPath = path.join(__dirname, '..', 'init_aiven.sql');
@@ -75,7 +107,7 @@ async function init() {
     }
 
     console.log('────────────────────────────────────────────────────────────────');
-    console.log('🎉 Database initialization complete and ready for production!');
+    console.log('🎉 Aiven database initialization complete!');
     console.log('────────────────────────────────────────────────────────────────');
   } catch (err) {
     console.error('❌ Database initialization failed:', err.message);
