@@ -1,0 +1,21 @@
+{
+  "name": "jay-ranchhod-lpg-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jay Ranchhod Gas Service - Daily LPG Management System",
+  "scripts": {
+    "build": "cd app && npm install && npm run build",
+    "start": "node backend/server.js",
+    "dev:backend": "cd backend && npm start",
+    "dev:frontend": "cd app && npm run dev",
+    "init-db": "node backend/scripts/init-db.js",
+    "test": "node backend/test/repair-stock.test.js && node backend/test/products.test.js && node app/test/stock.test.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.22.3"
+  }
+}
