@@ -115,18 +115,18 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
     });
   };
 
-  const setProduct = (i, field, val) => {
+  const setProduct = (idOrIndex, field, val) => {
     setEntry((prev) => {
       // Targeted immutable update — no full-object deep clone per keystroke.
       const products = prev.products.map((p, idx) =>
-        idx === i ? { ...p, [field]: val } : p
+        (idx === idOrIndex || p.id === idOrIndex) ? { ...p, [field]: val } : p
       );
       const next = { ...prev, products };
       // Closing stock always comes from the shared stock engine so that the
       // value held in state, the value rendered, and the value persisted are
       // guaranteed to be identical.
       next.products = next.products.map((p, idx) =>
-        idx === i ? { ...p, closingStock: computeClosingStock(next, p) } : p
+        (idx === idOrIndex || p.id === idOrIndex) ? { ...p, closingStock: computeClosingStock(next, p) } : p
       );
       return next;
     });
@@ -282,10 +282,10 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
         )}
       </div>
 
-      {/* Products */}
+      {/* Cylinders */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-head" style={{ flexWrap: "wrap", gap: 8 }}>
-          <span className="card-head-title">🛢️ Products · Stock & Sales</span>
+          <span className="card-head-title">🛢️ Cylinder Stock & Sales</span>
           <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
             <span style={{ color: T.success }}>Cash: {inr(calcs.originalCashSales)}</span>
             <span style={{ color: T.blue }}>Online: {inr(calcs.totalOnlineSales)}</span>
@@ -298,7 +298,7 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
               <thead>
                 <tr>
                   {[
-                    { label: "Product", align: "left" },
+                    { label: "Cylinder Product", align: "left" },
                     { label: "Opening Stock", align: "right" },
                     { label: "Rate (₹)", align: "right" },
                     { label: "Cash Qty", align: "right" },
@@ -314,7 +314,10 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                 </tr>
               </thead>
               <tbody>
-                {entry.products.map((p, i) => {
+                {entry.products.filter(p => {
+                  const def = (products || []).find(x => x.id === p.id);
+                  return !def || def.category !== 'accessory';
+                }).map((p) => {
                   // Opening stock is the previous day's In-Out Stock Master full cylinder value.
                   // Arrivals (filledReceived) must NOT be added here — they are already reflected in the In-Out Master section.
                   const autoOpening = num(p.openingStock);
@@ -329,10 +332,10 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                       <td style={{ fontWeight: 600, color: T.accent, whiteSpace: "nowrap" }}>{productLabel(p.id, products)}</td>
                       <td><input className="inp-inline" type="number" value={autoOpening} readOnly style={{ background: "rgba(0,119,255,0.05)", color: T.blue, fontWeight: 600 }} /></td>
                       <td><input className="inp-inline" type="number" value={p.rate} readOnly /></td>
-                      <td><input className="inp-inline" type="number" value={p.sell} onChange={(e) => setProduct(i, "sell", e.target.value)} readOnly={!canEdit} /></td>
-                      <td><input className="inp-inline" type="number" value={p.online} onChange={(e) => setProduct(i, "online", e.target.value)} readOnly={!canEdit} /></td>
-                      <td><input className="inp-inline" type="number" value={p.sbc} onChange={(e) => setProduct(i, "sbc", e.target.value)} readOnly={!canEdit} /></td>
-                      <td><input className="inp-inline" type="number" value={p.dbc} onChange={(e) => setProduct(i, "dbc", e.target.value)} readOnly={!canEdit} /></td>
+                      <td><input className="inp-inline" type="number" value={p.sell} onChange={(e) => setProduct(p.id, "sell", e.target.value)} readOnly={!canEdit} /></td>
+                      <td><input className="inp-inline" type="number" value={p.online} onChange={(e) => setProduct(p.id, "online", e.target.value)} readOnly={!canEdit} /></td>
+                      <td><input className="inp-inline" type="number" value={p.sbc} onChange={(e) => setProduct(p.id, "sbc", e.target.value)} readOnly={!canEdit} /></td>
+                      <td><input className="inp-inline" type="number" value={p.dbc} onChange={(e) => setProduct(p.id, "dbc", e.target.value)} readOnly={!canEdit} /></td>
                       <td style={{ color: T.success, fontWeight: 700, textAlign: "right" }} title={`Refill (Cash): ${inr(num(p.sell) * num(p.rate))} | SBC: ${inr(num(p.sbc) * num(p.sbcRate))} | DBC: ${inr(num(p.dbc) * num(p.dbcRate))}`}>{inr(cashTotal)}</td>
                       <td style={{ color: T.blue, fontWeight: 700, textAlign: "right" }}>{inr(onlineTotal)}</td>
                       <td style={{ color: closing < 0 ? T.danger : T.ink, fontWeight: 600, textAlign: "right" }}>{closing}<ConnectionStockNote entry={entry} productId={p.id} /></td>
@@ -342,7 +345,7 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                           type="number"
                           placeholder="0"
                           value={p.shortage || ""}
-                          onChange={(e) => setProduct(i, "shortage", e.target.value)}
+                          onChange={(e) => setProduct(p.id, "shortage", e.target.value)}
                           readOnly={!canEdit}
                           title="Shortage / Stolen — reminder only, does not affect stock"
                           style={{
@@ -354,7 +357,7 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                           }}
                         />
                       </td>
-                      <td style={{ width: 140 }}><input className="inp-inline left" type="text" placeholder="Note..." value={p.remarks || ""} onChange={(e) => setProduct(i, "remarks", e.target.value)} readOnly={!canEdit} /></td>
+                      <td style={{ width: 140 }}><input className="inp-inline left" type="text" placeholder="Note..." value={p.remarks || ""} onChange={(e) => setProduct(p.id, "remarks", e.target.value)} readOnly={!canEdit} /></td>
                     </tr>
                   );
                 })}
@@ -373,14 +376,18 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
         <div className="card-body" style={{ padding: 0 }}>
           <div style={{ overflowX: "auto" }}>
             <table className="tbl">
-              <thead><tr><th>Accessory</th><th style={{ textAlign: "center" }}>Sold Today?</th><th style={{ textAlign: "right" }}>Qty Sold</th><th style={{ textAlign: "right" }}>Rate (₹)</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
+              <thead><tr><th>Accessory / Part</th><th style={{ textAlign: "center" }}>Sold Today?</th><th style={{ textAlign: "right" }}>Qty Sold</th><th style={{ textAlign: "right" }}>Rate (₹)</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
               <tbody>
                 {(entry.accessories || []).map((a, i) => {
-                  const accDef = ACCESSORIES.find(x => x.id === a.accessoryId) || ACCESSORIES[i] || {};
+                  const accDef = (products || []).find(x => x.id === a.accessoryId) 
+                    || ACCESSORIES.find(x => x.id === a.accessoryId) 
+                    || ACCESSORIES[i] 
+                    || {};
+                  const label = accDef.label || accDef.short || accDef.shortName || a.accessoryId;
                   const total = num(a.qty) * num(a.rate);
                   return (
                     <tr key={a.accessoryId || i}>
-                      <td style={{ fontWeight: 600, color: T.accent }}>{accDef.label}</td>
+                      <td style={{ fontWeight: 600, color: T.accent }}>{label}</td>
                       <td style={{ textAlign: "center" }}>
                         <select className="inp-inline" value={a.sold ? "yes" : "no"} onChange={(e) => setAccessory(i, "sold", e.target.value === "yes")} disabled={!canEdit} style={{ width: 80, margin: "0 auto", cursor: canEdit ? "pointer" : "default" }}>
                           <option value="no">No</option>
@@ -950,7 +957,10 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                 </tr>
               </thead>
               <tbody>
-                {(entry.godownStock || []).map((item, idx) => {
+                {(entry.godownStock || []).filter(item => {
+                  const p = (products || PRODUCTS).find(prod => prod.id === item.productId);
+                  return !p || p.category !== 'accessory';
+                }).map((item, idx) => {
                   const p = (products || PRODUCTS).find(prod => prod.id === item.productId);
                   return (
                     <tr key={item.productId}>
@@ -1014,7 +1024,9 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                 {(() => {
                   // openingEmptyByProduct is memoised above (useMemo) — it replays the
                   // whole history and must NOT be recomputed on every keystroke.
-                  return (products || PRODUCTS).map((p) => {
+                  const activeCyls = (products || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+                  const cylList = activeCyls.length > 0 ? activeCyls : PRODUCTS;
+                  return cylList.map((p) => {
                   const prod = (entry.products || []).find(x => x.id === p.id) || {};
 
                   // Same shared stock engine as the product table and the save path.

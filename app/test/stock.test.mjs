@@ -347,6 +347,66 @@ t("computeEmptyBalanceSeries tracks custom product empty balance", () => {
   assert.equal(series["2026-03-01"]["p10"], -3);
 });
 
+console.log("\n── Cylinder & Accessory Separation ──");
+
+t("blankEntry strictly separates cylinders and accessories in daily entry", () => {
+  const mixedCatalog = [
+    { id: "p14", label: "14.2 KG Domestic", short: "14 KG", category: "cylinder", is_active: 1, fallback_rate: 850 },
+    { id: "p19", label: "19 KG Commercial", short: "19 KG", category: "cylinder", is_active: 1, fallback_rate: 1750 },
+    { id: "pipe", label: "Suraksha LPG Hose Pipe", short: "Pipe", category: "accessory", is_active: 1, fallback_rate: 150 },
+    { id: "stove", label: "LPG Gas Stove", short: "Stove", category: "accessory", is_active: 1, fallback_rate: 1500 },
+  ];
+  const e = blankEntry([], [], null, { products: mixedCatalog });
+  
+  // 1. entry.products should ONLY have cylinders
+  assert.equal(e.products.length, 2);
+  assert.deepEqual(e.products.map(p => p.id), ["p14", "p19"]);
+
+  // 2. entry.godownStock and arrivals should ONLY have cylinders
+  assert.equal(e.godownStock.length, 2);
+  assert.deepEqual(e.godownStock.map(g => g.productId), ["p14", "p19"]);
+  assert.equal(e.arrivals.length, 2);
+  assert.deepEqual(e.arrivals.map(a => a.productId), ["p14", "p19"]);
+
+  // 3. entry.accessories should have the accessories
+  assert.equal(e.accessories.length, 2);
+  assert.deepEqual(e.accessories.map(a => a.accessoryId), ["pipe", "stove"]);
+  assert.equal(e.accessories[0].rate, 150);
+  assert.equal(e.accessories[1].rate, 1500);
+});
+
+t("calcEntry calculates cylinder sales and accessory sales separately and combines in cashOnHand", () => {
+  const entry = {
+    openingCash: 5000,
+    bob: 1000,
+    products: [
+      { id: "p14", rate: 850, sell: 10, online: 2, sbc: 1, sbcRate: 1800, dbc: 0, dbcRate: 2200 }, // Cash: 8500 + 1800 = 10300. Online: 1700.
+    ],
+    accessories: [
+      { accessoryId: "pipe", sold: true, qty: 2, rate: 150 },   // 300
+      { accessoryId: "stove", sold: false, qty: 1, rate: 1500 } // not sold
+    ],
+    expenses: [{ amt: 500 }],
+    chequeOnline: [],
+    creditSales: [],
+    vehicleExpenses: [],
+    salaryPayments: [],
+    creditRecoveries: []
+  };
+
+  const calcs = calcEntry(entry);
+  // Cylinder sales: cash 10300, online 1700, total cylinder sales = 12000
+  assert.equal(calcs.originalCashSales, 10300);
+  assert.equal(calcs.totalOnlineSales, 1700);
+  assert.equal(calcs.totalSales, 12000);
+
+  // Accessory sales: 2 * 150 = 300
+  assert.equal(calcs.totalAccessorySales, 300);
+
+  // Cash on hand: 5000 (opening) + 12000 (cyl sales) + 300 (acc) - 1700 (online auto-deducted to bank) - 500 (expenses) - 1000 (bob) = 14100
+  assert.equal(calcs.cashOnHand, 14100);
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail);
 

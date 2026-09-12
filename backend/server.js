@@ -500,6 +500,9 @@ app.get('/api/load', verifyToken, async (req, res) => {
     `);
     const cylinderRows = productsRows.filter(p => p.category !== 'accessory' && p.isActive !== 0);
     const activeCylinders = cylinderRows.length > 0 ? cylinderRows : [{ id: 'p14', short: '14 KG' }, { id: 'p19', short: '19 KG' }, { id: 'p5', short: '5 KG' }];
+    const accessoryRows = productsRows.filter(p => p.category === 'accessory' && p.isActive !== 0);
+    const activeAccessories = accessoryRows.length > 0 ? accessoryRows : [{ id: 'pipe', short: 'Pipe' }, { id: 'stove', short: 'Stove' }];
+    const activeCylIds = new Set(activeCylinders.map(c => c.id));
     const [pricesRows] = await pool.query(`SELECT id, product_id as productId, DATE_FORMAT(effective_date, '%Y-%m-%d') as date, rate, sbc_rate as sbcRate, dbc_rate as dbcRate, note FROM price_history`);
     
     // 2. Load Commissions
@@ -647,20 +650,22 @@ app.get('/api/load', verifyToken, async (req, res) => {
 
     const entries = entriesRows.map(e => {
       const date = e.date;
-      const products = get(prodStockByDate, date).map(p => ({
-        id: p.id,
-        openingStock: p.openingStock || "",
-        rate: p.rate || "",
-        sbcRate: p.sbcRate || "",
-        dbcRate: p.dbcRate || "",
-        sell: p.sell || "",
-        online: p.online || "",
-        sbc: p.sbc || "",
-        dbc: p.dbc || "",
-        closingStock: p.closingStock || "",
-        shortage: p.shortage || "",
-        remarks: p.remarks || ""
-      }));
+      const products = get(prodStockByDate, date)
+        .filter(p => activeCylIds.has(p.id))
+        .map(p => ({
+          id: p.id,
+          openingStock: p.openingStock || "",
+          rate: p.rate || "",
+          sbcRate: p.sbcRate || "",
+          dbcRate: p.dbcRate || "",
+          sell: p.sell || "",
+          online: p.online || "",
+          sbc: p.sbc || "",
+          dbc: p.dbc || "",
+          closingStock: p.closingStock || "",
+          shortage: p.shortage || "",
+          remarks: p.remarks || ""
+        }));
       
       const delivery = {};
       get(deliveryByDate, date).forEach(d => {
@@ -713,9 +718,14 @@ app.get('/api/load', verifyToken, async (req, res) => {
           const row = arrivalsForDate.find(a => a.productId === p.id);
           return { productId: p.id, filledReceived: row ? row.filledReceived : "", emptyReturned: row ? row.emptyReturned : "" };
         }),
-        accessories: ['pipe', 'stove'].map(pid => {
-          const row = accForDate.find(a => a.accessoryId === pid);
-          return { accessoryId: pid, sold: !!row, qty: row ? row.qty : "", rate: row ? row.rate : "" };
+        accessories: activeAccessories.map(a => {
+          const row = accForDate.find(r => r.accessoryId === a.id);
+          return {
+            accessoryId: a.id,
+            sold: !!row,
+            qty: row ? row.qty : "",
+            rate: row ? row.rate : (a.fallbackRate || a.fallback_rate || "")
+          };
         })
       };
     });

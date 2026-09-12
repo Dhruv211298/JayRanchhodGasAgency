@@ -190,7 +190,7 @@ export const unrecordedConnectionIssues = (connectionsByDate, entries, afterDate
  * O(days x products) and must never be run inside a render body directly.
  */
 export const computeOpeningEmptyByProduct = (entries, beforeDate, productList = PRODUCTS) => {
-  const prods = productList || PRODUCTS;
+  const prods = (productList || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
   const history = (entries || [])
     .filter(e => e.date < beforeDate)
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -213,7 +213,7 @@ export const computeOpeningEmptyByProduct = (entries, beforeDate, productList = 
  * that turns an O(n) job into an O(n^2) one.
  */
 export const computeEmptyBalanceSeries = (entries, productList = PRODUCTS) => {
-  const prods = productList || PRODUCTS;
+  const prods = (productList || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
   const ordered = [...(entries || [])].sort((a, b) => a.date.localeCompare(b.date));
   const running = {};
   prods.forEach(p => { running[p.id] = 0; });
@@ -312,54 +312,79 @@ export const calcEntry = (e) => {
 export const computeDayCalcs = calcEntry;
 
 /* ── blank templates ── */
-export const blankProduct = (pricesArr, lastEntry = null, openingAdjust = {}, productList = PRODUCTS) => (productList || PRODUCTS).map((p) => {
-  // Opening stock = previous day's Products Stock & Sales (In-Out Stock Master) Closing Stock
-  // minus any connection cylinders issued on intervening days that have no
-  // saved daily entry (see unrecordedConnectionIssues).
-  let prevInOutFull = "";
-  if (lastEntry) {
-    const prevP = (lastEntry.products || []).find(x => x.id === p.id);
-    if (prevP && prevP.closingStock !== "") prevInOutFull = num(prevP.closingStock) - num(openingAdjust[p.id]);
-  }
-  return {
-    id: p.id, 
-    openingStock: prevInOutFull, 
-    rate: getCurrentRate(p.id, pricesArr, productList), 
-    sbcRate: getSbcRate(p.id, pricesArr, productList),
-    dbcRate: getDbcRate(p.id, pricesArr, productList),
-    sell: "", 
-    online: "",
-    sbc: "", 
-    dbc: "", 
-    closingStock: "",
-    shortage: "",  // Reminder only — does NOT affect stock calculations
-    remarks: ""
-  };
-});
+export const blankProduct = (pricesArr, lastEntry = null, openingAdjust = {}, productList = PRODUCTS) => {
+  const cylinders = (productList || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+  const list = cylinders.length > 0 ? cylinders : PRODUCTS;
+  return list.map((p) => {
+    // Opening stock = previous day's Products Stock & Sales (In-Out Stock Master) Closing Stock
+    // minus any connection cylinders issued on intervening days that have no
+    // saved daily entry (see unrecordedConnectionIssues).
+    let prevInOutFull = "";
+    if (lastEntry) {
+      const prevP = (lastEntry.products || []).find(x => x.id === p.id);
+      if (prevP && prevP.closingStock !== "") prevInOutFull = num(prevP.closingStock) - num(openingAdjust[p.id]);
+    }
+    return {
+      id: p.id, 
+      openingStock: prevInOutFull, 
+      rate: getCurrentRate(p.id, pricesArr, list), 
+      sbcRate: getSbcRate(p.id, pricesArr, list),
+      dbcRate: getDbcRate(p.id, pricesArr, list),
+      sell: "", 
+      online: "",
+      sbc: "", 
+      dbc: "", 
+      closingStock: "",
+      shortage: "",  // Reminder only — does NOT affect stock calculations
+      remarks: ""
+    };
+  });
+};
 export const blankDelivery = (boysArr) => Object.fromEntries((boysArr || DEFAULT_BOYS).map((b) => [b, { cash: "", online: "" }]));
 export const blankExpense = () => ({ id: uid(), desc: "", amt: "" });
 export const blankCheque = () => ({ id: uid(), desc: "", amt: "" });
 export const blankCredit = () => ({ id: uid(), customerName: "", productId: "p14", filledQty: "", emptyQty: "", amt: "", remarks: "" });
 export const blankVehicleExp = () => ({ id: uid(), vehicleId: "", vehicleNo: "", expType: "Fuel", desc: "", amt: "" });
 export const blankSalaryPayment = () => ({ id: uid(), employeeId: "", employeeName: "", amt: "", type: "Salary", notes: "", forMonth: monthStr() });
-export const blankArrival = (productList = PRODUCTS) => (productList || PRODUCTS).map(p => ({ productId: p.id, filledReceived: "", emptyReturned: "" }));
-export const blankAccessory = (pricesArr) => ACCESSORIES.map(a => ({ accessoryId: a.id, sold: false, qty: "", rate: getCurrentRate(a.id, pricesArr) }));
+export const blankArrival = (productList = PRODUCTS) => {
+  const cylinders = (productList || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+  const list = cylinders.length > 0 ? cylinders : PRODUCTS;
+  return list.map(p => ({ productId: p.id, filledReceived: "", emptyReturned: "" }));
+};
+export const blankAccessory = (pricesArr, productList = PRODUCTS) => {
+  const accs = (productList || []).filter(p => p.category === 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+  const list = accs.length > 0 ? accs : ACCESSORIES;
+  return list.map(a => ({
+    accessoryId: a.id,
+    sold: false,
+    qty: "",
+    rate: getCurrentRate(a.id, pricesArr, productList)
+  }));
+};
 export const blankOtherCashCredit = () => ({ id: uid(), desc: "", amt: "" });
 
-export const blankGodownStock = (lastEntry = null, productList = PRODUCTS) => (productList || PRODUCTS).map(p => {
-  if (!lastEntry) return { productId: p.id, filled: "", empty: "" };
-  // The godownStock values saved in the DB are already the end-of-day (closing) stock
-  // the user physically entered. So today's opening = yesterday's closing directly.
-  const g = (lastEntry.godownStock || []).find(x => x.productId === p.id) || {};
-  return { 
-    productId: p.id, 
-    filled: g.filled !== undefined && g.filled !== "" ? g.filled : "", 
-    empty: g.empty !== undefined && g.empty !== "" ? g.empty : "" 
-  };
-});
+export const blankGodownStock = (lastEntry = null, productList = PRODUCTS) => {
+  const cylinders = (productList || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+  const list = cylinders.length > 0 ? cylinders : PRODUCTS;
+  return list.map(p => {
+    if (!lastEntry) return { productId: p.id, filled: "", empty: "" };
+    // The godownStock values saved in the DB are already the end-of-day (closing) stock
+    // the user physically entered. So today's opening = yesterday's closing directly.
+    const g = (lastEntry.godownStock || []).find(x => x.productId === p.id) || {};
+    return { 
+      productId: p.id, 
+      filled: g.filled !== undefined && g.filled !== "" ? g.filled : "", 
+      empty: g.empty !== undefined && g.empty !== "" ? g.empty : "" 
+    };
+  });
+};
 
 /** Blank connection-module arrays for a day with no activity. */
-export const blankConnectionMovements = (productList = PRODUCTS) => (productList || PRODUCTS).map(p => ({ productId: p.id, filledOut: 0, emptyIn: 0 }));
+export const blankConnectionMovements = (productList = PRODUCTS) => {
+  const cylinders = (productList || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+  const list = cylinders.length > 0 ? cylinders : PRODUCTS;
+  return list.map(p => ({ productId: p.id, filledOut: 0, emptyIn: 0 }));
+};
 
 /**
  * A fresh entry for `opts.date` (default today).
@@ -376,16 +401,18 @@ export const blankConnectionMovements = (productList = PRODUCTS) => (productList
 export const blankEntry = (pricesArr = [], boysArr = [], lastEntry = null, opts = {}) => {
   const date = opts.date || todayStr();
   const prods = (opts.products && opts.products.length > 0) ? opts.products : PRODUCTS;
+  const cylinders = prods.filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+  const activeCyls = cylinders.length > 0 ? cylinders : PRODUCTS;
   const byDate = opts.connectionsByDate || {};
   const forDay = byDate[date] || {};
   const openingAdjust = lastEntry
-    ? unrecordedConnectionIssues(byDate, opts.entries || [], lastEntry.date, date, prods)
+    ? unrecordedConnectionIssues(byDate, opts.entries || [], lastEntry.date, date, activeCyls)
     : {};
   return {
     date,
     openingCash: lastEntry ? calcEntry(lastEntry).cashOnHand : "",
     bob: "",
-    products: blankProduct(pricesArr, lastEntry, openingAdjust, prods),
+    products: blankProduct(pricesArr, lastEntry, openingAdjust, activeCyls),
     delivery: blankDelivery(boysArr),
     expenses: [blankExpense()],
     chequeOnline: [blankCheque()],
@@ -393,15 +420,15 @@ export const blankEntry = (pricesArr = [], boysArr = [], lastEntry = null, opts 
     vehicleExpenses: [blankVehicleExp()],
     salaryPayments: [blankSalaryPayment()],
     creditRecoveries: [],
-    godownStock: blankGodownStock(lastEntry, prods),
+    godownStock: blankGodownStock(lastEntry, activeCyls),
     hasArrival: false,
-    arrivals: blankArrival(prods),
-    accessories: blankAccessory(pricesArr),
+    arrivals: blankArrival(activeCyls),
+    accessories: blankAccessory(pricesArr, prods),
     otherCashCredits: [blankOtherCashCredit()],
     connectionNew: forDay.connectionNew || [],
     connectionPayments: forDay.connectionPayments || [],
     connectionRefunds: forDay.connectionRefunds || [],
-    connectionMovements: forDay.connectionMovements || blankConnectionMovements(prods),
+    connectionMovements: forDay.connectionMovements || blankConnectionMovements(activeCyls),
     // Surfaced in the UI so the operator knows opening stock was adjusted.
     unrecordedConnectionIssues: openingAdjust,
   };
