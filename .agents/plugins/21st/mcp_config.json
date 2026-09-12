@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "21st": {
+      "command": "cmd.exe",
+      "args": ["/c", "npx", "-y", "@21st-dev/magic"],
+      "env": {
+        "API_KEY_21ST": "${API_KEY_21ST}"
+      }
+    },
+    "21st-remote": {
+      "serverUrl": "https://21st.dev/api/mcp"
+    }
+  }
+}
