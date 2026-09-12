@@ -2021,7 +2021,7 @@ const shapeEvent = (r, penalties) => ({
 async function penaltiesFor(conn, eventIds) {
   if (eventIds.length === 0) return [];
   const [rows] = await conn.query(
-    'SELECT event_id AS eventId, item_description AS item, amount FROM connection_event_penalties WHERE event_id IN (?)', [eventIds]);
+    'SELECT event_id AS eventId, item_name AS item, amount FROM connection_event_penalties WHERE event_id IN (?)', [eventIds]);
   return rows;
 }
 
@@ -2053,8 +2053,8 @@ async function recordEvent(req, res, { row, penalties, key, auditType }) {
     );
     if (penalties && penalties.length > 0) {
       await connection.query(
-        'INSERT INTO connection_event_penalties (id, event_id, item_description, amount) VALUES ?',
-        [penalties.map(p => [newId(), id, p.item, p.amount])]
+        'INSERT INTO connection_event_penalties (id, event_id, penalty_type, item_name, amount) VALUES ?',
+        [penalties.map(p => [newId(), id, 'other', p.item || p.itemDescription || 'Penalty', p.amount])]
       );
     }
     await writeAudit(connection, {
