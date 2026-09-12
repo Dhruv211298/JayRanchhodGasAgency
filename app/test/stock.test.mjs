@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   computeClosingStock, finaliseProducts, computeOpeningEmptyByProduct,
   computeEmptyBalanceSeries, emptyInFor, emptyDespatchedFor, todayStr, calcEntry,
-  computeDayCalcs, blankEntry, unrecordedConnectionIssues, monthStr, toCsv
+  computeDayCalcs, blankEntry, unrecordedConnectionIssues, monthStr, toCsv, getCommRate
 } from "../src/constants.js";
 
 let pass = 0, fail = 0;
@@ -405,6 +405,102 @@ t("calcEntry calculates cylinder sales and accessory sales separately and combin
 
   // Cash on hand: 5000 (opening) + 12000 (cyl sales) + 300 (acc) - 1700 (online auto-deducted to bank) - 500 (expenses) - 1000 (bob) = 14100
   assert.equal(calcs.cashOnHand, 14100);
+});
+
+console.log("\n── Admin Dashboard: Expenses & Real Profit ──");
+
+t("calculates total operating expenses as general + vehicle + salary payments", () => {
+  const entry = {
+    expenses: [{ amt: 250 }, { amt: 150 }],
+    vehicleExpenses: [{ amt: 800 }],
+    salaryPayments: [{ amt: 2000 }],
+  };
+  const c = calcEntry(entry);
+  assert.equal(c.totalExpenses, 400);
+  assert.equal(c.totalVehicleExp, 800);
+  assert.equal(c.totalSalaryPayments, 2000);
+  const totalOperatingExpenses = c.totalExpenses + c.totalVehicleExp + c.totalSalaryPayments;
+  assert.equal(totalOperatingExpenses, 3200);
+});
+
+t("calculates real net profit = (cylinder commission + accessory sales) - total operating expenses", () => {
+  const commissions = [
+    { productId: "p14", perCyl: 73.08, date: "2026-01-01" },
+    { productId: "p19", perCyl: 120.00, date: "2026-01-01" }
+  ];
+  const entry = {
+    date: "2026-09-05",
+    products: [
+      { id: "p14", sell: 50, online: 10 },  // 60 cyls * 73.08 = 4384.8
+      { id: "p19", sell: 10, online: 0 }    // 10 cyls * 120 = 1200
+    ],
+    accessories: [
+      { accessoryId: "pipe", sold: true, qty: 5, rate: 150 }, // 750
+    ],
+    expenses: [{ amt: 500 }],
+    vehicleExpenses: [{ amt: 300 }],
+    salaryPayments: [{ amt: 1000 }]
+  };
+  const c = calcEntry(entry);
+  const commIncome = entry.products.reduce((acc, p) => acc + (p.sell + p.online) * getCommRate(p.id, commissions, entry.date), 0);
+  assert.equal(commIncome, 4384.8 + 1200); // 5584.8
+
+  const totalExp = c.totalExpenses + c.totalVehicleExp + c.totalSalaryPayments; // 500 + 300 + 1000 = 1800
+  assert.equal(totalExp, 1800);
+
+  const agencyEarnings = commIncome + c.totalAccessorySales; // 5584.8 + 750 = 6334.8
+  assert.equal(agencyEarnings, 6334.8);
+
+  const realProfit = agencyEarnings - totalExp; // 6334.8 - 1800 = 4534.8
+  assert.equal(Math.round(realProfit * 100) / 100, 4534.8);
+});
+
+t("month-year filtering isolates entries for selected month and aggregates correctly", () => {
+  const commissions = [{ productId: "p14", perCyl: 70, date: "2026-01-01" }];
+  const entries = [
+    {
+      date: "2026-08-31", // August entry
+      products: [{ id: "p14", sell: 20, online: 0, rate: 850 }],
+      expenses: [{ amt: 1000 }]
+    },
+    {
+      date: "2026-09-01", // September entry 1
+      products: [{ id: "p14", sell: 10, online: 5, rate: 850 }],
+      accessories: [{ accessoryId: "pipe", sold: true, qty: 2, rate: 150 }],
+      expenses: [{ amt: 200 }],
+      vehicleExpenses: [{ amt: 100 }],
+      salaryPayments: [{ amt: 500 }]
+    },
+    {
+      date: "2026-09-02", // September entry 2
+      products: [{ id: "p14", sell: 25, online: 0, rate: 850 }],
+      expenses: [{ amt: 300 }]
+    }
+  ];
+
+  const selectedMonth = "2026-09";
+  const monthEntries = entries.filter(e => e.date.startsWith(selectedMonth));
+  assert.equal(monthEntries.length, 2);
+
+  const mCylinders = monthEntries.reduce((s, e) => s + (e.products || []).reduce((ps, p) => ps + (p.sell || 0) + (p.online || 0), 0), 0);
+  assert.equal(mCylinders, (10 + 5) + 25); // 40 cylinders
+
+  const mAccSales = monthEntries.reduce((s, e) => s + calcEntry(e).totalAccessorySales, 0);
+  assert.equal(mAccSales, 300);
+
+  const mComm = monthEntries.reduce((s, e) => {
+    return s + (e.products || []).reduce((ps, p) => ps + ((p.sell || 0) + (p.online || 0)) * getCommRate(p.id, commissions, e.date), 0);
+  }, 0);
+  assert.equal(mComm, 40 * 70); // 2800
+
+  const mTotalExpenses = monthEntries.reduce((s, e) => {
+    const c = calcEntry(e);
+    return s + c.totalExpenses + c.totalVehicleExp + c.totalSalaryPayments;
+  }, 0);
+  assert.equal(mTotalExpenses, (200 + 100 + 500) + 300); // 1100
+
+  const mRealProfit = (mComm + mAccSales) - mTotalExpenses;
+  assert.equal(mRealProfit, (2800 + 300) - 1100); // 2000
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

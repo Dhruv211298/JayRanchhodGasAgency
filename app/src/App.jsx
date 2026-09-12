@@ -391,7 +391,7 @@ export default function App() {
         {/* Admin Tabs */}
         {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} />}
         {tab === "admin-history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("admin-entry"); }} isAdmin={true} onDelete={handleDeleteEntry} products={products} />}
-        {tab === "admin-dashboard" && <AdminDashboard entries={entries} pending={pending} prices={prices} commissions={commissions} products={products} />}
+        {tab === "admin-dashboard" && <AdminDashboard entries={entries} pending={pending} prices={prices} commissions={commissions} products={products} onViewDay={(e) => { setEntry(e); setTab("admin-entry"); }} />}
         {tab === "admin-connections" && <ConnectionsTab isAdmin={true} onChanged={onConnectionsChanged} prices={prices} />}
         {tab === "admin-prices" && <AdminPriceHistory prices={prices} setPrices={setPrices} products={products} />}
         {tab === "admin-comm" && <AdminCommission commissions={commissions} setCommissions={setCommissions} products={products} />}

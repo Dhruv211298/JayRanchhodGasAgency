@@ -10,117 +10,427 @@ import AdminProductMaster from "./AdminProductMaster";
 
 export { AdminProductMaster };
 
-export function AdminDashboard({ entries, pending, prices, commissions, products = PRODUCTS }) {
-  const now = new Date();
-  const thisMonth = entries.filter(e => { const d = new Date(e.date+"T00:00:00"); return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear(); });
-  const lastMonth = entries.filter(e => { const d = new Date(e.date+"T00:00:00"); const lm = new Date(now.getFullYear(), now.getMonth()-1, 1); return d.getMonth()===lm.getMonth() && d.getFullYear()===lm.getFullYear(); });
+export function AdminDashboard({ entries = [], pending = [], prices = [], commissions = [], products = PRODUCTS, onViewDay }) {
+  const currentMonthStr = todayStr().slice(0, 7); // e.g. "2026-09"
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
 
-  const sumSales = (arr) => arr.reduce((s,e) => s+calcEntry(e).totalSales, 0);
-  const sumCyl   = (arr) => arr.reduce((s,e) => e.products.reduce((ss,p) => ss+num(p.sell)+num(p.online), 0)+s, 0);
+  const [selYear, selMonthNum] = selectedMonth.split("-").map(Number);
 
-  const mSales  = sumSales(thisMonth);
-  const lmSales = sumSales(lastMonth);
-  const mCyl    = sumCyl(thisMonth);
-  const outstanding = pending.filter(p=>!p.cleared).reduce((s,p)=>s+(p.originalAmt-p.recovered),0);
-  const mConn = thisMonth.reduce((acc, e) => {
+  // Month navigation helpers
+  const handlePrevMonth = () => {
+    const d = new Date(selYear, selMonthNum - 2, 1);
+    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const handleNextMonth = () => {
+    const d = new Date(selYear, selMonthNum, 1);
+    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  };
+
+  const handleMonthChange = (mNum) => {
+    setSelectedMonth(`${selYear}-${String(mNum).padStart(2, "0")}`);
+  };
+
+  const handleYearChange = (yNum) => {
+    setSelectedMonth(`${yNum}-${String(selMonthNum).padStart(2, "0")}`);
+  };
+
+  // Generate Year options (current year +- 3 years, and any years from entries)
+  const entryYears = (entries || []).map(e => parseInt(e.date?.slice(0, 4))).filter(Boolean);
+  const thisYear = new Date().getFullYear();
+  const minYear = Math.min(thisYear - 2, ...entryYears, 2024);
+  const maxYear = Math.max(thisYear + 2, ...entryYears, 2028);
+  const yearOptions = [];
+  for (let y = minYear; y <= maxYear; y++) yearOptions.push(y);
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  // Filter entries for the selected month
+  const monthEntries = (entries || [])
+    .filter(e => e.date && e.date.startsWith(selectedMonth))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  // Previous month entries for comparison
+  const prevDate = new Date(selYear, selMonthNum - 2, 1);
+  const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+  const prevMonthEntries = (entries || []).filter(e => e.date && e.date.startsWith(prevMonthStr));
+
+  // Calculations for selected month
+  const mCylSales = monthEntries.reduce((s, e) => s + calcEntry(e).totalSales, 0);
+  const mAccSales = monthEntries.reduce((s, e) => s + calcEntry(e).totalAccessorySales, 0);
+  const mGrossSales = mCylSales + mAccSales;
+
+  const lmGrossSales = prevMonthEntries.reduce((s, e) => s + calcEntry(e).totalSales + calcEntry(e).totalAccessorySales, 0);
+  const deltaSales = lmGrossSales > 0 ? (((mGrossSales - lmGrossSales) / lmGrossSales) * 100).toFixed(1) : null;
+
+  // Cylinders sold
+  const mCylinders = monthEntries.reduce((s, e) => {
+    return s + (e.products || []).reduce((ps, p) => ps + num(p.sell) + num(p.online), 0);
+  }, 0);
+
+  // Agency Commission earned on cylinder sales
+  const mCommission = monthEntries.reduce((s, e) => {
+    return s + (e.products || []).reduce((ps, p) => ps + (num(p.sell) + num(p.online)) * getCommRate(p.id, commissions, e.date), 0);
+  }, 0);
+
+  // Total Gross Agency Earnings (Commission + Accessories)
+  const mAgencyEarnings = mCommission + mAccSales;
+
+  // Expenses breakdown
+  const mGeneralExpenses = monthEntries.reduce((s, e) => s + calcEntry(e).totalExpenses, 0);
+  const mVehicleExpenses = monthEntries.reduce((s, e) => s + calcEntry(e).totalVehicleExp, 0);
+  const mSalaryExpenses  = monthEntries.reduce((s, e) => s + calcEntry(e).totalSalaryPayments, 0);
+  const mTotalExpenses   = mGeneralExpenses + mVehicleExpenses + mSalaryExpenses;
+
+  // Real Profit = (Agency Commission + Accessory Sales) - Total Operating Expenses
+  const mRealProfit = mAgencyEarnings - mTotalExpenses;
+
+  // Outstanding credit (all-time pending)
+  const outstanding = (pending || []).filter(p => !p.cleared).reduce((s, p) => s + (num(p.originalAmt) - num(p.recovered)), 0);
+
+  // Connections in month
+  const mConn = monthEntries.reduce((acc, e) => {
     const c = calcEntry(e);
-    acc.cash += c.totalConnectionPaymentsCash; acc.online += c.totalConnectionPaymentsOnline; acc.refunds += c.totalConnectionRefunds;
+    acc.cash += c.totalConnectionPaymentsCash;
+    acc.online += c.totalConnectionPaymentsOnline;
+    acc.refunds += c.totalConnectionRefunds;
     return acc;
   }, { cash: 0, online: 0, refunds: 0 });
 
-  const totalComm = thisMonth.reduce((s,e) => {
-    return s + e.products.reduce((ps,p) => ps + (num(p.sell)+num(p.online))*getCommRate(p.id, commissions), 0);
-  },0);
+  // Product snapshot breakdown
+  const productBreakdown = (products || PRODUCTS).map((p) => {
+    const isAcc = p.category === 'accessory';
+    const qty = monthEntries.reduce((s, e) => {
+      if (isAcc) {
+        const accRow = (e.accessories || []).find(x => x.accessoryId === p.id);
+        return s + (accRow && accRow.sold ? num(accRow.qty) : 0);
+      } else {
+        const prodRow = (e.products || []).find(x => x.id === p.id);
+        return s + num(prodRow?.sell) + num(prodRow?.online);
+      }
+    }, 0);
 
-  const productBreakdown = (products || PRODUCTS).map((p) => ({
-    ...p,
-    qty: thisMonth.reduce((s,e)=>{
-      const prodRow = (e.products || []).find(x => x.id === p.id);
-      return s + num(prodRow?.sell) + num(prodRow?.online);
-    }, 0),
-    revenue: thisMonth.reduce((s,e)=>{
-      const prodRow = (e.products || []).find(x => x.id === p.id);
-      return s + (num(prodRow?.sell) + num(prodRow?.online)) * num(prodRow?.rate);
-    }, 0),
-    rate: getCurrentRate(p.id, prices, products),
-    comm: getCommRate(p.id, commissions),
-  }));
+    const revenue = monthEntries.reduce((s, e) => {
+      if (isAcc) {
+        const accRow = (e.accessories || []).find(x => x.accessoryId === p.id);
+        return s + (accRow && accRow.sold ? num(accRow.qty) * num(accRow.rate) : 0);
+      } else {
+        const prodRow = (e.products || []).find(x => x.id === p.id);
+        return s + (num(prodRow?.sell) + num(prodRow?.online)) * num(prodRow?.rate)
+                 + (num(prodRow?.sbc) * num(prodRow?.sbcRate))
+                 + (num(prodRow?.dbc) * num(prodRow?.dbcRate));
+      }
+    }, 0);
 
-  const delta = lmSales>0 ? (((mSales-lmSales)/lmSales)*100).toFixed(1) : null;
+    const commRate = isAcc ? 0 : getCommRate(p.id, commissions);
+    const commTotal = isAcc ? 0 : monthEntries.reduce((s, e) => {
+      const prodRow = (e.products || []).find(x => x.id === p.id);
+      return s + (num(prodRow?.sell) + num(prodRow?.online)) * getCommRate(p.id, commissions, e.date);
+    }, 0);
+
+    return {
+      ...p,
+      isAcc,
+      qty,
+      revenue,
+      rate: getCurrentRate(p.id, prices, products),
+      commRate,
+      commTotal,
+    };
+  });
 
   return (
     <div className="fade-in">
-      <div className="stat-row">
-        <div className="stat-card" style={{ "--kpi-color": T.blue }}>
-          <div className="stat-val" style={{color: T.blue}}>{inr(mSales)}</div>
-          <div className="stat-lbl">This Month Sales</div>
-          {delta && <div className="stat-delta" style={{color: num(delta)>=0?T.success:T.danger}}>{num(delta)>=0?"▲":"▼"} {Math.abs(delta)}% vs last month</div>}
+      {/* Month & Year Selection Toolbar */}
+      <div className="card" style={{ marginBottom: 16, padding: "12px 18px", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, background: "#ffffff", border: `1px solid ${T.border}`, borderRadius: 10, boxShadow: "0 2px 6px rgba(0,0,0,0.03)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>📅</span>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: T.ink, display: "flex", alignItems: "center", gap: 8 }}>
+              {monthNames[selMonthNum - 1]} {selYear}
+              {selectedMonth === currentMonthStr && <span className="badge badge-success" style={{ fontSize: 10, padding: "2px 8px" }}>Current Month</span>}
+            </div>
+            <div style={{ fontSize: 11, color: T.inkLight }}>{monthEntries.length} daily entries recorded</div>
+          </div>
         </div>
-        <div className="stat-card" style={{ "--kpi-color": T.success }}>
-          <div className="stat-val" style={{color: T.success}}>{mCyl}</div>
-          <div className="stat-lbl">Cylinders This Month</div>
-        </div>
-        <div className="stat-card" style={{ "--kpi-color": T.danger }}>
-          <div className="stat-val" style={{color: T.danger}}>{inr(outstanding)}</div>
-          <div className="stat-lbl">Outstanding Credit</div>
-        </div>
-        <div className="stat-card" style={{ "--kpi-color": T.accent }}>
-          <div className="stat-val" style={{color: T.accent}}>{inr(totalComm)}</div>
-          <div className="stat-lbl">Commission This Month</div>
-        </div>
-        <div className="stat-card" style={{ "--kpi-color": T.success }}>
-          <div className="stat-val" style={{color: T.success}}>{inr(mConn.cash)}</div>
-          <div className="stat-lbl">Connection Payments (Cash)</div>
-          {mConn.online > 0 && <div className="stat-delta" style={{color: T.blue}}>+ {inr(mConn.online)} online</div>}
-        </div>
-        <div className="stat-card" style={{ "--kpi-color": T.danger }}>
-          <div className="stat-val" style={{color: T.danger}}>{inr(mConn.refunds)}</div>
-          <div className="stat-lbl">Connection Refunds Paid</div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn-ghost" onClick={handlePrevMonth} title="Previous Month" style={{ padding: "6px 12px", fontWeight: 700 }}>
+            ◀ Prev
+          </button>
+          
+          <select 
+            className="inp" 
+            value={selMonthNum} 
+            onChange={(e) => handleMonthChange(Number(e.target.value))}
+            style={{ width: 135, fontWeight: 600, padding: "6px 10px" }}
+          >
+            {monthNames.map((name, idx) => (
+              <option key={idx + 1} value={idx + 1}>{name}</option>
+            ))}
+          </select>
+
+          <select 
+            className="inp" 
+            value={selYear} 
+            onChange={(e) => handleYearChange(Number(e.target.value))}
+            style={{ width: 85, fontWeight: 600, padding: "6px 10px" }}
+          >
+            {yearOptions.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+
+          <button className="btn-ghost" onClick={handleNextMonth} title="Next Month" style={{ padding: "6px 12px", fontWeight: 700 }}>
+            Next ▶
+          </button>
+
+          {selectedMonth !== currentMonthStr && (
+            <button 
+              className="btn-ghost" 
+              onClick={() => setSelectedMonth(currentMonthStr)} 
+              style={{ borderColor: T.blue, color: T.blue, fontWeight: 700, padding: "6px 12px" }}
+            >
+              Current Month
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="g2">
+      {/* KPI Cards Row */}
+      <div className="stat-row" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", marginBottom: 16 }}>
+        {/* Total Sales / Turnover */}
+        <div className="stat-card" style={{ "--kpi-color": T.blue }}>
+          <div className="stat-val" style={{ color: T.blue }}>{inr(mGrossSales)}</div>
+          <div className="stat-lbl">Turnover (Sales)</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>
+            Cylinders: {inr(mCylSales)} · Acc: {inr(mAccSales)}
+          </div>
+          {deltaSales && (
+            <div className="stat-delta" style={{ color: num(deltaSales) >= 0 ? T.success : T.danger, marginTop: 4 }}>
+              {num(deltaSales) >= 0 ? "▲" : "▼"} {Math.abs(deltaSales)}% vs prev month
+            </div>
+          )}
+        </div>
+
+        {/* Cylinders Sold */}
+        <div className="stat-card" style={{ "--kpi-color": "#0ea5e9" }}>
+          <div className="stat-val" style={{ color: "#0ea5e9" }}>{mCylinders}</div>
+          <div className="stat-lbl">Cylinders Sold</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>In {monthNames[selMonthNum - 1]} {selYear}</div>
+        </div>
+
+        {/* Total Operating Expenses */}
+        <div className="stat-card" style={{ "--kpi-color": T.danger }}>
+          <div className="stat-val" style={{ color: T.danger }}>{inr(mTotalExpenses)}</div>
+          <div className="stat-lbl">Total Expenses</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }} title={`General: ${inr(mGeneralExpenses)} | Vehicles: ${inr(mVehicleExpenses)} | Salaries: ${inr(mSalaryExpenses)}`}>
+            Gen: {inr(mGeneralExpenses)} · Veh: {inr(mVehicleExpenses)} · Sal: {inr(mSalaryExpenses)}
+          </div>
+        </div>
+
+        {/* Agency Commission */}
+        <div className="stat-card" style={{ "--kpi-color": T.accent }}>
+          <div className="stat-val" style={{ color: T.accent }}>{inr(mCommission)}</div>
+          <div className="stat-lbl">Cylinder Commission</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>BPCL Commission Income</div>
+        </div>
+
+        {/* REAL PROFIT */}
+        <div className="stat-card" style={{ 
+          "--kpi-color": mRealProfit >= 0 ? T.success : T.danger,
+          background: mRealProfit >= 0 ? "rgba(16,185,129,0.04)" : "rgba(239,68,68,0.04)",
+          border: `1.5px solid ${mRealProfit >= 0 ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`
+        }}>
+          <div className="stat-val" style={{ color: mRealProfit >= 0 ? T.success : T.danger, fontWeight: 800 }}>
+            {mRealProfit >= 0 ? "+" : "−"}{inr(Math.abs(mRealProfit))}
+          </div>
+          <div className="stat-lbl" style={{ fontWeight: 800, color: mRealProfit >= 0 ? "#047857" : "#b91c1c" }}>
+            ✨ REAL PROFIT {mRealProfit >= 0 ? "(Net)" : "(Loss)"}
+          </div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>
+            Earnings ({inr(mAgencyEarnings)}) − Exp ({inr(mTotalExpenses)})
+          </div>
+        </div>
+
+        {/* Outstanding Credit */}
+        <div className="stat-card" style={{ "--kpi-color": "#f59e0b" }}>
+          <div className="stat-val" style={{ color: "#d97706" }}>{inr(outstanding)}</div>
+          <div className="stat-lbl">Outstanding Credit</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>Total Pending All-Time</div>
+        </div>
+      </div>
+
+      {/* Grid: P&L Financial Summary + Product Snapshot */}
+      <div className="g2" style={{ marginBottom: 16 }}>
+        {/* Monthly P&L / Financial Summary Card */}
         <div className="card">
-          <div className="card-head"><span className="card-head-title">📦 Product Snapshot</span><span className="badge badge-ink">{fmtMonth(todayStr())}</span></div>
-          <div style={{overflowX:"auto"}}>
+          <div className="card-head">
+            <span className="card-head-title">📊 Profit & Loss (P&L) Summary</span>
+            <span className="badge badge-ink">{monthNames[selMonthNum - 1]} {selYear}</span>
+          </div>
+          <div className="card-body" style={{ padding: "10px 16px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.inkLight, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+              1. Agency Gross Income (+)
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
+              <span style={{ fontSize: 13, color: T.inkMid }}>Cylinder Sales Commission</span>
+              <span style={{ fontWeight: 600, color: T.success }}>+{inr(mCommission)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
+              <span style={{ fontSize: 13, color: T.inkMid }}>Accessories & Parts Sales</span>
+              <span style={{ fontWeight: 600, color: T.success }}>+{inr(mAccSales)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderBottom: "1px solid #e0e0e0", background: "rgba(16,185,129,0.06)", borderRadius: 4, marginTop: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>Total Gross Earnings</span>
+              <span style={{ fontWeight: 700, color: T.success }}>+{inr(mAgencyEarnings)}</span>
+            </div>
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: T.inkLight, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6, marginTop: 14 }}>
+              2. Operating Expenses (−)
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
+              <span style={{ fontSize: 13, color: T.inkMid }}>General Daily Expenses</span>
+              <span style={{ fontWeight: 600, color: T.danger }}>−{inr(mGeneralExpenses)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
+              <span style={{ fontSize: 13, color: T.inkMid }}>Vehicle & Fuel Expenses</span>
+              <span style={{ fontWeight: 600, color: T.danger }}>−{inr(mVehicleExpenses)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
+              <span style={{ fontSize: 13, color: T.inkMid }}>Employee Salaries & Advances</span>
+              <span style={{ fontWeight: 600, color: T.danger }}>−{inr(mSalaryExpenses)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderBottom: "1px solid #e0e0e0", background: "rgba(239,68,68,0.06)", borderRadius: 4, marginTop: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: T.ink }}>Total Operating Expenses</span>
+              <span style={{ fontWeight: 700, color: T.danger }}>−{inr(mTotalExpenses)}</span>
+            </div>
+
+            {/* REAL NET PROFIT HIGHLIGHT BANNER */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px 14px",
+              marginTop: 14,
+              borderRadius: 8,
+              background: mRealProfit >= 0 ? "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.05))" : "linear-gradient(135deg, rgba(239,68,68,0.12), rgba(239,68,68,0.05))",
+              border: `1.5px solid ${mRealProfit >= 0 ? "#10b981" : "#ef4444"}`
+            }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: mRealProfit >= 0 ? "#047857" : "#b91c1c", letterSpacing: 0.5 }}>
+                  REAL NET PROFIT ({monthNames[selMonthNum - 1]} {selYear})
+                </div>
+                <div style={{ fontSize: 10, color: T.inkLight }}>Gross Earnings − Total Expenses</div>
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: mRealProfit >= 0 ? "#047857" : "#b91c1c" }}>
+                {mRealProfit >= 0 ? "+" : "−"}{inr(Math.abs(mRealProfit))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Product & Accessory Snapshot Table */}
+        <div className="card">
+          <div className="card-head">
+            <span className="card-head-title">📦 Product & Accessory Snapshot</span>
+            <span className="badge badge-ink">{monthNames[selMonthNum - 1]} {selYear}</span>
+          </div>
+          <div style={{ overflowX: "auto" }}>
             <table className="tbl">
-              <thead><tr><th>Product</th><th style={{ textAlign: "right" }}>Current Rate</th><th style={{ textAlign: "right" }}>Sold Qty</th><th style={{ textAlign: "right" }}>Revenue</th><th style={{ textAlign: "right" }}>Commission</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Product / Item</th>
+                  <th style={{ textAlign: "right" }}>Current Rate</th>
+                  <th style={{ textAlign: "right" }}>Sold Qty</th>
+                  <th style={{ textAlign: "right" }}>Revenue</th>
+                  <th style={{ textAlign: "right" }}>Commission</th>
+                </tr>
+              </thead>
               <tbody>
-                {productBreakdown.map(p=>(
+                {productBreakdown.map(p => (
                   <tr key={p.id}>
-                    <td style={{fontWeight:600}}>{p.short}</td>
-                    <td style={{color:T.inkLight, textAlign: "right"}}>{inr(p.rate)}</td>
-                    <td style={{fontWeight:600, textAlign: "right"}}>{p.qty}</td>
-                    <td style={{color:T.success, fontWeight:600, textAlign: "right"}}>{inr(p.revenue)}</td>
-                    <td style={{color:T.accent, fontWeight:600, textAlign: "right"}}>{inr(p.qty*p.comm)}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      <span style={{ marginRight: 6 }}>{p.isAcc ? "🔧" : "🛢️"}</span>
+                      {p.short || p.label}
+                    </td>
+                    <td style={{ color: T.inkLight, textAlign: "right" }}>{inr(p.rate)}</td>
+                    <td style={{ fontWeight: 600, textAlign: "right" }}>{p.qty}</td>
+                    <td style={{ color: T.success, fontWeight: 600, textAlign: "right" }}>{inr(p.revenue)}</td>
+                    <td style={{ color: p.isAcc ? T.inkLight : T.accent, fontWeight: 600, textAlign: "right" }}>
+                      {p.isAcc ? "—" : inr(p.commTotal)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+      </div>
 
-        <div className="card">
-          <div className="card-head"><span className="card-head-title">📅 Recent Days</span></div>
-          <div style={{overflowX:"auto"}}>
-            <table className="tbl">
-              <thead><tr><th>Date</th><th style={{ textAlign: "right" }}>Sales</th><th style={{ textAlign: "right" }}>Cylinders</th><th style={{ textAlign: "right" }}>Cash on Hand</th></tr></thead>
-              <tbody>
-                {[...entries].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6).map(e=>{
+      {/* Month's Daily Entries Table */}
+      <div className="card">
+        <div className="card-head">
+          <span className="card-head-title">📅 Daily Entries in {monthNames[selMonthNum - 1]} {selYear}</span>
+          <span style={{ fontSize: 12, color: T.inkLight }}>{monthEntries.length} entries recorded</span>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th style={{ textAlign: "right" }}>Turnover</th>
+                <th style={{ textAlign: "right" }}>Cylinders</th>
+                <th style={{ textAlign: "right" }}>Accessories</th>
+                <th style={{ textAlign: "right" }}>Expenses</th>
+                <th style={{ textAlign: "right" }}>Commission</th>
+                <th style={{ textAlign: "right" }}>Real Profit</th>
+                <th style={{ textAlign: "right" }}>Cash on Hand</th>
+                {onViewDay && <th style={{ textAlign: "center" }}>Action</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {monthEntries.length === 0 ? (
+                <tr>
+                  <td colSpan={onViewDay ? 9 : 8} style={{ textAlign: "center", padding: "24px 12px", color: T.inkLight }}>
+                    No daily entries recorded for {monthNames[selMonthNum - 1]} {selYear}.
+                  </td>
+                </tr>
+              ) : (
+                monthEntries.map(e => {
                   const c = calcEntry(e);
-                  const cyl = e.products.reduce((s,p)=>s+num(p.sell),0);
+                  const cyl = (e.products || []).reduce((s, p) => s + num(p.sell) + num(p.online), 0);
+                  const dayComm = (e.products || []).reduce((ps, p) => ps + (num(p.sell) + num(p.online)) * getCommRate(p.id, commissions, e.date), 0);
+                  const dayExp = c.totalExpenses + c.totalVehicleExp + c.totalSalaryPayments;
+                  const dayProfit = (dayComm + c.totalAccessorySales) - dayExp;
                   return (
-                    <tr key={e.date}>
-                      <td style={{color:T.inkLight,whiteSpace:"nowrap"}}>{fmtDate(e.date)}</td>
-                      <td style={{color:T.success,fontWeight:600, textAlign: "right"}}>{inr(c.totalSales)}</td>
-                      <td style={{fontWeight:600, textAlign: "right"}}>{cyl}</td>
-                      <td style={{color:c.cashOnHand<0?T.danger:T.ink,fontWeight:700, textAlign: "right"}}>{inr(c.cashOnHand)}</td>
+                    <tr key={e.date} style={{ cursor: onViewDay ? "pointer" : "default" }} onClick={() => onViewDay && onViewDay(e)}>
+                      <td style={{ color: T.ink, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtDate(e.date)}</td>
+                      <td style={{ color: T.blue, fontWeight: 600, textAlign: "right" }}>{inr(c.totalSales + c.totalAccessorySales)}</td>
+                      <td style={{ fontWeight: 600, textAlign: "right" }}>{cyl}</td>
+                      <td style={{ color: c.totalAccessorySales > 0 ? T.success : T.inkLight, textAlign: "right" }}>{inr(c.totalAccessorySales)}</td>
+                      <td style={{ color: dayExp > 0 ? T.danger : T.inkLight, fontWeight: 600, textAlign: "right" }}>{inr(dayExp)}</td>
+                      <td style={{ color: T.accent, fontWeight: 600, textAlign: "right" }}>{inr(dayComm)}</td>
+                      <td style={{ color: dayProfit >= 0 ? T.success : T.danger, fontWeight: 700, textAlign: "right" }}>
+                        {dayProfit >= 0 ? "+" : "−"}{inr(Math.abs(dayProfit))}
+                      </td>
+                      <td style={{ color: c.cashOnHand < 0 ? T.danger : T.ink, fontWeight: 700, textAlign: "right" }}>{inr(c.cashOnHand)}</td>
+                      {onViewDay && (
+                        <td style={{ textAlign: "center" }}>
+                          <button className="btn-ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={(ev) => { ev.stopPropagation(); onViewDay(e); }}>
+                            View ↗
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
