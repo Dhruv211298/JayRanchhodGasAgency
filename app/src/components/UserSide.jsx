@@ -10,61 +10,284 @@ import {
 } from "../constants";
 
 import SharedSalaryReport from "./SharedSalaryReport";
+import { api } from "../api";
+import { NewConnectionForm, AdditionalBottleForm, SurrenderForm } from "./ConnectionsTab";
 
 const VEH_EXP_TYPES = ["Fuel", "Repair", "Maintenance", "Toll / Tax", "Washing", "Other"];
 
-/* Read-only card listing the day's connection-module events. These rows are
-   written by the Connections tab, not here; they are shown so the operator
-   can see exactly why cash-on-hand and closing stock moved. No customer
-   data exists in this system — BPCL's system holds that. */
-export function ConnectionsDayCard({ entry, calcs, products = PRODUCTS }) {
+/* Comprehensive card listing the day's connection-module events with inline record options.
+   Operators can directly record New Connections, Additional Bottles, and Surrenders right
+   inside Daily Entry so stock movements and cash on hand stay 100% in sync without leaving the screen. */
+export function ConnectionsDayCard({ entry, calcs, products = PRODUCTS, onConnectionsChanged, isAdmin = false, canEdit = true }) {
+  const [activeForm, setActiveForm] = useState(null); // null | "new" | "additional" | "surrender"
   const news = entry.connectionNew || [];
   const pays = entry.connectionPayments || [];
   const refs = entry.connectionRefunds || [];
-  if (!news.length && !pays.length && !refs.length) return null;
+  const totalEvents = news.length + pays.length + refs.length;
+
+  const handleDone = () => {
+    setActiveForm(null);
+    onConnectionsChanged && onConnectionsChanged();
+  };
+
+  const handleVoid = async (e) => {
+    const r = await Swal.fire({
+      title: "Void this entry?",
+      html: `Voiding this connection event will remove its stock and cash effects for ${fmtDate(entry.date)}.<br/>Audited action.`,
+      icon: "warning",
+      input: "text",
+      inputPlaceholder: "Reason (optional)",
+      showCancelButton: true,
+      confirmButtonText: "Void Entry",
+      confirmButtonColor: "#ef4444"
+    });
+    if (!r.isConfirmed) return;
+    try {
+      await api.deleteConnectionEvent(e.id, r.value || "");
+      onConnectionsChanged && onConnectionsChanged();
+    } catch (err) {
+      Swal.fire({ title: "Not voided", text: err.message, icon: "error", confirmButtonColor: "#ef4444" });
+    }
+  };
+
   return (
-    <div className="card" style={{ marginBottom: 14, borderLeft: `4px solid ${T.blue}` }}>
-      <div className="card-head">
-        <span className="card-head-title">🔗 Connections · This Day's Events</span>
-        <span style={{ fontSize: 12, fontWeight: 700, display: "flex", gap: 12 }}>
-          <span style={{ color: T.success }}>+{inr(calcs.totalConnectionPaymentsCash)} cash</span>
-          <span style={{ color: T.blue }}>{inr(calcs.totalConnectionPaymentsOnline)} online</span>
-          <span style={{ color: T.danger }}>−{inr(calcs.totalConnectionRefunds)} refunds</span>
-        </span>
+    <div className="card" style={{ marginBottom: 16, borderLeft: `4px solid ${T.blue}` }}>
+      {/* Header */}
+      <div className="card-head" style={{ flexWrap: "wrap", gap: 10, padding: "12px 18px", background: "linear-gradient(135deg, rgba(37,99,235,0.06) 0%, rgba(37,99,235,0.01) 100%)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span className="card-head-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span>🔗 Connection Events & Quick Record</span>
+            <span className={`badge ${totalEvents > 0 ? "badge-blue" : "badge-ink"}`} style={{ fontSize: 11 }}>
+              {totalEvents} {totalEvents === 1 ? "Event" : "Events"} ({fmtDate(entry.date)})
+            </span>
+          </span>
+        </div>
+
+        {/* Quick action record buttons right in the header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {canEdit && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                className={`btn-ghost ${activeForm === "new" ? "active" : ""}`}
+                style={{
+                  fontSize: 12, padding: "6px 12px",
+                  background: activeForm === "new" ? T.accent : "rgba(37,99,235,0.08)",
+                  color: activeForm === "new" ? "#fff" : T.accent,
+                  borderColor: T.accent,
+                  fontWeight: 600,
+                  display: "flex", alignItems: "center", gap: 5
+                }}
+                onClick={() => setActiveForm(activeForm === "new" ? null : "new")}
+              >
+                <span>➕</span> New Connection
+              </button>
+              <button
+                type="button"
+                className={`btn-ghost ${activeForm === "additional" ? "active" : ""}`}
+                style={{
+                  fontSize: 12, padding: "6px 12px",
+                  background: activeForm === "additional" ? T.success : "rgba(16,185,129,0.08)",
+                  color: activeForm === "additional" ? "#fff" : T.success,
+                  borderColor: T.success,
+                  fontWeight: 600,
+                  display: "flex", alignItems: "center", gap: 5
+                }}
+                onClick={() => setActiveForm(activeForm === "additional" ? null : "additional")}
+              >
+                <span>🛢️</span> Additional Bottle
+              </button>
+              <button
+                type="button"
+                className={`btn-ghost ${activeForm === "surrender" ? "active" : ""}`}
+                style={{
+                  fontSize: 12, padding: "6px 12px",
+                  background: activeForm === "surrender" ? T.danger : "rgba(239,68,68,0.08)",
+                  color: activeForm === "surrender" ? "#fff" : T.danger,
+                  borderColor: T.danger,
+                  fontWeight: 600,
+                  display: "flex", alignItems: "center", gap: 5
+                }}
+                onClick={() => setActiveForm(activeForm === "surrender" ? null : "surrender")}
+              >
+                <span>↩️</span> Surrender / Return
+              </button>
+            </div>
+          )}
+
+          {/* Cash effect totals */}
+          <div style={{ fontSize: 11, fontWeight: 700, display: "flex", gap: 10, background: "#fff", padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}` }}>
+            <span style={{ color: T.success }} title="Additional bottle cash collections">+{inr(calcs.totalConnectionPaymentsCash || 0)} Cash</span>
+            <span style={{ color: T.blue }} title="Additional bottle online payments (bank)">{inr(calcs.totalConnectionPaymentsOnline || 0)} Online</span>
+            <span style={{ color: T.danger }} title="Surrender refund payouts">−{inr(calcs.totalConnectionRefunds || 0)} Refunds</span>
+          </div>
+        </div>
       </div>
+
+      {/* Embedded Record Drawer when activeForm is set */}
+      {activeForm && (
+        <div style={{ padding: "16px", background: "#f8fafc", borderBottom: `1px solid ${T.border}` }} className="fade-in">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={`btn-ghost ${activeForm === "new" ? "active" : ""}`}
+                onClick={() => setActiveForm("new")}
+                style={{
+                  padding: "5px 12px", fontSize: 12, fontWeight: 600,
+                  background: activeForm === "new" ? T.accent : "#fff",
+                  color: activeForm === "new" ? "#fff" : T.inkMid
+                }}
+              >
+                ➕ New Connection (Stock only)
+              </button>
+              <button
+                type="button"
+                className={`btn-ghost ${activeForm === "additional" ? "active" : ""}`}
+                onClick={() => setActiveForm("additional")}
+                style={{
+                  padding: "5px 12px", fontSize: 12, fontWeight: 600,
+                  background: activeForm === "additional" ? T.success : "#fff",
+                  color: activeForm === "additional" ? "#fff" : T.inkMid
+                }}
+              >
+                🛢️ Additional Bottle (Cash / Online)
+              </button>
+              <button
+                type="button"
+                className={`btn-ghost ${activeForm === "surrender" ? "active" : ""}`}
+                onClick={() => setActiveForm("surrender")}
+                style={{
+                  padding: "5px 12px", fontSize: 12, fontWeight: 600,
+                  background: activeForm === "surrender" ? T.danger : "#fff",
+                  color: activeForm === "surrender" ? "#fff" : T.inkMid
+                }}
+              >
+                ↩️ Surrender / Return (Empty In + Cash Out)
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn-icon"
+              onClick={() => setActiveForm(null)}
+              title="Close form"
+              style={{ fontSize: 18, width: 28, height: 28 }}
+            >
+              ×
+            </button>
+          </div>
+
+          {activeForm === "new" && (
+            <NewConnectionForm
+              isAdmin={isAdmin}
+              onDone={handleDone}
+              defaultDate={entry.date}
+              lockDate={!isAdmin}
+              products={products}
+            />
+          )}
+          {activeForm === "additional" && (
+            <AdditionalBottleForm
+              isAdmin={isAdmin}
+              onDone={handleDone}
+              defaultDate={entry.date}
+              lockDate={!isAdmin}
+              products={products}
+            />
+          )}
+          {activeForm === "surrender" && (
+            <SurrenderForm
+              isAdmin={isAdmin}
+              onDone={handleDone}
+              defaultDate={entry.date}
+              lockDate={!isAdmin}
+              products={products}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Events Table for this date */}
       <div className="card-body" style={{ padding: 0 }}>
         <div style={{ overflowX: "auto" }}>
           <table className="tbl">
-            <thead><tr><th>Event</th><th>Product</th><th style={{ textAlign: "right" }}>Qty</th><th>Stock Effect</th><th>Detail</th><th style={{ textAlign: "right" }}>Cash Effect</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Product</th>
+                <th style={{ textAlign: "right" }}>Qty</th>
+                <th>Stock Effect</th>
+                <th>Detail / Mode</th>
+                <th style={{ textAlign: "right" }}>Cash Effect</th>
+                {isAdmin && <th style={{ width: 40 }}></th>}
+              </tr>
+            </thead>
             <tbody>
+              {totalEvents === 0 && (
+                <tr>
+                  <td colSpan={isAdmin ? 7 : 6} style={{ padding: 24, textAlign: "center", color: T.inkLight }}>
+                    <div style={{ fontSize: 13, marginBottom: 6 }}>No connection events recorded for <strong>{fmtDate(entry.date)}</strong>.</div>
+                    {canEdit && (
+                      <div style={{ fontSize: 11, color: T.inkLight }}>
+                        Click <strong>➕ New Connection</strong>, <strong>🛢️ Additional Bottle</strong>, or <strong>↩️ Surrender / Return</strong> above to record an event.
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )}
               {news.map(x => (
                 <tr key={"n" + x.id}>
                   <td><span className="badge badge-ink">New Connection</span></td>
-                  <td>{productLabel(x.productId, products)}</td>
+                  <td style={{ fontWeight: 600 }}>{productLabel(x.productId, products)}</td>
                   <td style={{ textAlign: "right" }}>{x.qty} {x.connectionType}</td>
                   <td style={{ color: T.danger, fontSize: 12 }}>−{x.cylindersOut} filled</td>
                   <td style={{ fontSize: 12, color: T.inkMid }}>{x.remarks || "—"}</td>
                   <td style={{ textAlign: "right", color: T.inkLight, fontSize: 11 }}>none (BPCL deposit)</td>
+                  {isAdmin && (
+                    <td>
+                      <button className="btn-icon" title="Void event" onClick={() => handleVoid({ id: x.id, eventType: "new" })}>×</button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {pays.map(x => (
                 <tr key={"p" + x.id}>
                   <td><span className="badge badge-blue">Additional Bottle</span></td>
-                  <td>{productLabel(x.productId, products)}</td>
+                  <td style={{ fontWeight: 600 }}>{productLabel(x.productId, products)}</td>
                   <td style={{ textAlign: "right" }}>{x.qty}</td>
                   <td style={{ color: T.danger, fontSize: 12 }}>−{x.qty} filled</td>
-                  <td style={{ fontSize: 12, color: T.inkMid }}>{x.mode === "cash" ? "Cash" : "Online"}{x.remarks ? ` · ${x.remarks}` : ""}</td>
-                  <td style={{ textAlign: "right", fontWeight: 700, color: x.mode === "cash" ? T.success : T.blue }}>{x.mode === "cash" ? "+" : ""}{inr(x.amt)}{x.mode === "online" ? <div style={{ fontSize: 9, color: T.inkLight }}>not in cash</div> : null}</td>
+                  <td style={{ fontSize: 12, color: T.inkMid }}>{x.mode === "cash" ? "💵 Cash" : "🏦 Online"}{x.remarks ? ` · ${x.remarks}` : ""}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, color: x.mode === "cash" ? T.success : T.blue }}>
+                    {x.mode === "cash" ? "+" : ""}{inr(x.amt)}
+                    {x.mode === "online" ? <div style={{ fontSize: 9, color: T.inkLight }}>bank (not in till)</div> : null}
+                  </td>
+                  {isAdmin && (
+                    <td>
+                      <button className="btn-icon" title="Void event" onClick={() => handleVoid({ id: x.id, eventType: "additional" })}>×</button>
+                    </td>
+                  )}
                 </tr>
               ))}
               {refs.map(x => (
                 <tr key={"r" + x.id}>
                   <td><span className="badge badge-danger">Surrender</span></td>
-                  <td>{productLabel(x.productId, products)}</td>
+                  <td style={{ fontWeight: 600 }}>{productLabel(x.productId, products)}</td>
                   <td style={{ textAlign: "right" }}>{x.qty}</td>
-                  <td style={{ fontSize: 12 }}><span style={{ color: T.success }}>+{x.cylindersQty} empty</span>{num(x.cylindersMissing) > 0 && <span style={{ color: T.warn }}> · {x.cylindersMissing} missing</span>}</td>
-                  <td style={{ fontSize: 12, color: T.inkMid }}>Refund {inr(x.refundAmount)}{num(x.penaltyDeducted) > 0 ? ` − penalty ${inr(x.penaltyDeducted)}` : ""}{x.notes ? ` · ${x.notes}` : ""}</td>
+                  <td style={{ fontSize: 12 }}>
+                    <span style={{ color: T.success }}>+{x.cylindersQty} empty</span>
+                    {num(x.cylindersMissing) > 0 && <span style={{ color: T.warn }}> · {x.cylindersMissing} missing</span>}
+                  </td>
+                  <td style={{ fontSize: 12, color: T.inkMid }}>
+                    Refund {inr(x.refundAmount)}
+                    {num(x.penaltyDeducted) > 0 ? ` − penalty ${inr(x.penaltyDeducted)}` : ""}
+                    {x.notes ? ` · ${x.notes}` : ""}
+                  </td>
                   <td style={{ textAlign: "right", fontWeight: 700, color: T.danger }}>−{inr(x.amt)}</td>
+                  {isAdmin && (
+                    <td>
+                      <button className="btn-icon" title="Void event" onClick={() => handleVoid({ id: x.id, eventType: "surrender" })}>×</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -90,7 +313,7 @@ export function ConnectionStockNote({ entry, productId }) {
   );
 }
 
-export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entries, prices, deliveryBoys, vehicles, employees, pending, isAdmin, products = PRODUCTS }) {
+export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entries, prices, deliveryBoys, vehicles, employees, pending, isAdmin, products = PRODUCTS, onConnectionsChanged }) {
   const calcs = calcEntry(entry);
   const orphanIssues = Object.entries(entry.unrecordedConnectionIssues || {}).filter(([, n]) => num(n) > 0);
   // Replaying the full history to derive the opening empty-cylinder balance is
@@ -829,8 +1052,15 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
         </div>
       </div>
 
-      {/* Connection module events for this date (read-only; recorded on the Connections tab) */}
-      <ConnectionsDayCard entry={entry} calcs={calcs} products={products} />
+      {/* Connection module events for this date with full record options (New Connection, Additional Bottle, Surrender) */}
+      <ConnectionsDayCard
+        entry={entry}
+        calcs={calcs}
+        products={products}
+        onConnectionsChanged={onConnectionsChanged}
+        isAdmin={isAdmin}
+        canEdit={canEdit}
+      />
 
       {/* Combined Outflows & Expenses Card */}
       <div className="card" style={{ marginBottom: 14 }}>

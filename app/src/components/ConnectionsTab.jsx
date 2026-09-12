@@ -51,16 +51,26 @@ const PENALTY_PRESETS = [
 ];
 
 /* Product selector — the same PRODUCTS source as the Day Entry form. */
-function ProductSelect({ value, onChange }) {
+export function ProductSelect({ value, onChange, products = PRODUCTS }) {
+  const list = (products || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+  const items = list.length > 0 ? list : PRODUCTS;
   return (
     <select className="inp" value={value} onChange={e => onChange(e.target.value)}>
-      {PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+      {items.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
     </select>
   );
 }
 
 /* Event-date field: office users always see today (locked); admins may pick a past date. */
-function EventDateField({ value, onChange, isAdmin }) {
+export function EventDateField({ value, onChange, isAdmin, lockDate = false }) {
+  if (lockDate) {
+    return (
+      <div className="field">
+        <label>Date (Entry Date)</label>
+        <input className="inp" type="date" value={value} readOnly style={{ background: "rgba(0,119,255,0.05)", fontWeight: 600, color: T.accent }} />
+      </div>
+    );
+  }
   return (
     <div className="field">
       <label>Date {isAdmin ? "" : "(today only)"}</label>
@@ -70,15 +80,20 @@ function EventDateField({ value, onChange, isAdmin }) {
   );
 }
 
-function EffectBox({ children, danger }) {
+export function EffectBox({ children, danger }) {
   return <div style={{ fontSize: 12, color: danger ? T.danger : T.inkMid, background: danger ? T.dangerBg : T.cardAlt, borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>{children}</div>;
 }
 
 /* ── Form 1: New connection — stock only ── */
-function NewConnectionForm({ isAdmin, onDone }) {
-  const blank = () => ({ productId: "p14", connectionType: "single", qty: "1", remarks: "", date: todayStr() });
+export function NewConnectionForm({ isAdmin, onDone, defaultDate, lockDate = false, products = PRODUCTS }) {
+  const blank = () => ({ productId: "p14", connectionType: "single", qty: "1", remarks: "", date: defaultDate || todayStr() });
   const [f, setF] = useState(blank());
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (defaultDate) setF(x => ({ ...x, date: defaultDate }));
+  }, [defaultDate]);
+
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const qty = num(f.qty);
   const cyl = qty * (f.connectionType === "double" ? 2 : 1);
@@ -88,7 +103,7 @@ function NewConnectionForm({ isAdmin, onDone }) {
     try {
       const r = await api.recordNewConnection({ date: f.date, productId: f.productId, connectionType: f.connectionType, qty, remarks: f.remarks });
       if (r.duplicate) await swalDup();
-      else Swal.fire({ title: "Recorded", text: `${r.cylinders_out} filled ${productLabel(f.productId)} issued from stock. No cash entry — the deposit is in BPCL's system.`, icon: "success", confirmButtonColor: "#0077ff", timer: 3000, timerProgressBar: true });
+      else Swal.fire({ title: "Recorded", text: `${r.cylinders_out} filled ${productLabel(f.productId, products)} issued from stock. No cash entry — the deposit is in BPCL's system.`, icon: "success", confirmButtonColor: "#0077ff", timer: 3000, timerProgressBar: true });
       setF(blank()); onDone();
     } catch (e) { swalErr("Not recorded", e); }
     setBusy(false);
@@ -97,7 +112,7 @@ function NewConnectionForm({ isAdmin, onDone }) {
     <div className="card" style={{ height: "100%" }}>
       <div className="card-head"><span className="card-head-title">➕ New Connection</span><span className="badge badge-ink">stock only</span></div>
       <div className="card-body">
-        <div className="field"><label>Cylinder Category *</label><ProductSelect value={f.productId} onChange={v => set("productId", v)} /></div>
+        <div className="field"><label>Cylinder Category *</label><ProductSelect value={f.productId} onChange={v => set("productId", v)} products={products} /></div>
         <div className="g2">
           <div className="field"><label>Connection Type *</label>
             <select className="inp" value={f.connectionType} onChange={e => set("connectionType", e.target.value)}>
@@ -107,9 +122,9 @@ function NewConnectionForm({ isAdmin, onDone }) {
           </div>
           <div className="field"><label>No. of Connections *</label><input className="inp" type="number" min="1" step="1" value={f.qty} onChange={e => set("qty", e.target.value)} /></div>
         </div>
-        <EventDateField value={f.date} onChange={v => set("date", v)} isAdmin={isAdmin} />
+        <EventDateField value={f.date} onChange={v => set("date", v)} isAdmin={isAdmin} lockDate={lockDate} />
         <div className="field"><label>Remarks (optional)</label><input className="inp" type="text" value={f.remarks} onChange={e => set("remarks", e.target.value)} placeholder="Not required" /></div>
-        <EffectBox>Stock: <strong>−{cyl || 0} filled {productLabel(f.productId)}</strong> on {fmtDate(f.date)}. Cash: <strong>none</strong> (deposit recorded by BPCL).</EffectBox>
+        <EffectBox>Stock: <strong>−{cyl || 0} filled {productLabel(f.productId, products)}</strong> on {fmtDate(f.date)}. Cash: <strong>none</strong> (deposit recorded by BPCL).</EffectBox>
         <button className="btn-primary" style={{ width: "100%" }} onClick={submit} disabled={busy}>{busy ? "Saving…" : "✅ Issue Cylinders"}</button>
       </div>
     </div>
@@ -117,10 +132,15 @@ function NewConnectionForm({ isAdmin, onDone }) {
 }
 
 /* ── Form 2: Additional bottle — filled out + cash / online in ── */
-function AdditionalBottleForm({ isAdmin, onDone }) {
-  const blank = () => ({ productId: "p14", qty: "1", amount: "", paymentMode: "", remarks: "", date: todayStr() });
+export function AdditionalBottleForm({ isAdmin, onDone, defaultDate, lockDate = false, products = PRODUCTS }) {
+  const blank = () => ({ productId: "p14", qty: "1", amount: "", paymentMode: "", remarks: "", date: defaultDate || todayStr() });
   const [f, setF] = useState(blank());
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (defaultDate) setF(x => ({ ...x, date: defaultDate }));
+  }, [defaultDate]);
+
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const qty = num(f.qty);
   const amountOk = f.amount !== "" && Number.isFinite(Number(f.amount)) && num(f.amount) > 0;
@@ -132,7 +152,7 @@ function AdditionalBottleForm({ isAdmin, onDone }) {
     try {
       const r = await api.recordAdditionalBottle({ date: f.date, productId: f.productId, qty, amount: num(f.amount), paymentMode: f.paymentMode, remarks: f.remarks });
       if (r.duplicate) await swalDup();
-      else Swal.fire({ title: "Recorded", html: `${r.cylinders_out} filled ${productLabel(f.productId)} issued.<br/>${inr(r.amount)} recorded as <strong>${r.payment_mode === "cash" ? "cash — added to cash on hand" : "online — reported, not added to cash on hand"}</strong>.`, icon: "success", confirmButtonColor: "#0077ff" });
+      else Swal.fire({ title: "Recorded", html: `${r.cylinders_out} filled ${productLabel(f.productId, products)} issued.<br/>${inr(r.amount)} recorded as <strong>${r.payment_mode === "cash" ? "cash — added to cash on hand" : "online — reported, not added to cash on hand"}</strong>.`, icon: "success", confirmButtonColor: "#0077ff" });
       setF(blank()); onDone();
     } catch (e) { swalErr("Not recorded", e); }
     setBusy(false);
@@ -142,7 +162,7 @@ function AdditionalBottleForm({ isAdmin, onDone }) {
       <div className="card-head"><span className="card-head-title">🛢️ Additional Bottle</span><span className="badge badge-success">cash / online IN</span></div>
       <div className="card-body">
         <div className="g2">
-          <div className="field"><label>Cylinder Category *</label><ProductSelect value={f.productId} onChange={v => set("productId", v)} /></div>
+          <div className="field"><label>Cylinder Category *</label><ProductSelect value={f.productId} onChange={v => set("productId", v)} products={products} /></div>
           <div className="field"><label>No. of Bottles *</label><input className="inp" type="number" min="1" step="1" value={f.qty} onChange={e => set("qty", e.target.value)} /></div>
         </div>
         <div className="g2">
@@ -157,10 +177,10 @@ function AdditionalBottleForm({ isAdmin, onDone }) {
             </div>
           </div>
         </div>
-        <EventDateField value={f.date} onChange={v => set("date", v)} isAdmin={isAdmin} />
+        <EventDateField value={f.date} onChange={v => set("date", v)} isAdmin={isAdmin} lockDate={lockDate} />
         <div className="field"><label>Remarks (optional)</label><input className="inp" type="text" value={f.remarks} onChange={e => set("remarks", e.target.value)} placeholder="Not required" /></div>
         <EffectBox>
-          Stock: <strong>−{qty || 0} filled {productLabel(f.productId)}</strong> · Cash on hand: <strong style={{ color: f.paymentMode === "cash" ? T.success : T.inkMid }}>
+          Stock: <strong>−{qty || 0} filled {productLabel(f.productId, products)}</strong> · Cash on hand: <strong style={{ color: f.paymentMode === "cash" ? T.success : T.inkMid }}>
             {f.paymentMode === "cash" ? `+${inr(f.amount)}` : f.paymentMode === "online" ? `unchanged (${inr(f.amount)} online, reported separately)` : "—"}
           </strong>
         </EffectBox>
@@ -171,11 +191,16 @@ function AdditionalBottleForm({ isAdmin, onDone }) {
 }
 
 /* ── Form 3: Surrender — empties in + net cash out ── */
-function SurrenderForm({ isAdmin, onDone }) {
-  const blank = () => ({ productId: "p14", qty: "1", cylindersReturned: "1", cylindersMissing: "0", refundAmount: "", remarks: "", date: todayStr() });
+export function SurrenderForm({ isAdmin, onDone, defaultDate, lockDate = false, products = PRODUCTS }) {
+  const blank = () => ({ productId: "p14", qty: "1", cylindersReturned: "1", cylindersMissing: "0", refundAmount: "", remarks: "", date: defaultDate || todayStr() });
   const [f, setF] = useState(blank());
   const [penalties, setPenalties] = useState([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (defaultDate) setF(x => ({ ...x, date: defaultDate }));
+  }, [defaultDate]);
+
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const addPenalty = (preset = "") => setPenalties(p => [...p, { id: uid(), preset, other: "", amount: "" }]);
   const setPenalty = (id, k, v) => setPenalties(p => p.map(x => x.id === id ? { ...x, [k]: v } : x));
@@ -201,7 +226,7 @@ function SurrenderForm({ isAdmin, onDone }) {
         penalties: penalties.map(p => ({ itemDescription: penaltyItem(p), amount: num(p.amount) })),
       });
       if (r.duplicate) await swalDup();
-      else Swal.fire({ title: "Surrender recorded", html: `Net <strong>${inr(r.net_paid)}</strong> paid out in cash (refund ${inr(r.amount)} − penalties ${inr(r.penalty_deducted)}).<br/>${r.cylinders_in} empty ${productLabel(f.productId)} added to stock${r.cylinders_missing > 0 ? `; ${r.cylinders_missing} missing (penalty only, not stock)` : ""}.`, icon: "success", confirmButtonColor: "#0077ff" });
+      else Swal.fire({ title: "Surrender recorded", html: `Net <strong>${inr(r.net_paid)}</strong> paid out in cash (refund ${inr(r.amount)} − penalties ${inr(r.penalty_deducted)}).<br/>${r.cylinders_in} empty ${productLabel(f.productId, products)} added to stock${r.cylinders_missing > 0 ? `; ${r.cylinders_missing} missing (penalty only, not stock)` : ""}.`, icon: "success", confirmButtonColor: "#0077ff" });
       setF(blank()); setPenalties([]); onDone();
     } catch (e) { swalErr("Not recorded", e); }
     setBusy(false);
@@ -212,7 +237,7 @@ function SurrenderForm({ isAdmin, onDone }) {
       <div className="card-head"><span className="card-head-title">↩️ Surrender / Return</span><span className="badge badge-danger">cash OUT</span></div>
       <div className="card-body">
         <div className="g3">
-          <div className="field"><label>Cylinder Category *</label><ProductSelect value={f.productId} onChange={v => set("productId", v)} /></div>
+          <div className="field"><label>Cylinder Category *</label><ProductSelect value={f.productId} onChange={v => set("productId", v)} products={products} /></div>
           <div className="field"><label>Connections Surrendered *</label><input className="inp" type="number" min="1" step="1" value={f.qty} onChange={e => set("qty", e.target.value)} /></div>
           <div className="field"><label>Refund Amount (₹) *</label>
             <input className="inp" type="number" min="0" step="0.01" value={f.refundAmount} onChange={e => set("refundAmount", e.target.value)} placeholder="From BPCL passbook / SV" />
@@ -223,7 +248,7 @@ function SurrenderForm({ isAdmin, onDone }) {
           <div className="field"><label>Cylinders Missing (not returned)</label><input className="inp" type="number" min="0" step="1" value={f.cylindersMissing} onChange={e => set("cylindersMissing", e.target.value)} />
             {missing > 0 && !hasMissingPenalty && <div style={{ fontSize: 10, color: T.warn, marginTop: 3 }}>⚠️ add a "Missing cylinder" penalty below — missing cylinders never enter stock.</div>}
           </div>
-          <EventDateField value={f.date} onChange={v => set("date", v)} isAdmin={isAdmin} />
+          <EventDateField value={f.date} onChange={v => set("date", v)} isAdmin={isAdmin} lockDate={lockDate} />
         </div>
         {!countsOk && qty >= 1 && <div className="login-err">⚠️ {qty} connection(s) hold between {qty} and {qty * 2} cylinders — account for each one as returned or missing.</div>}
 
@@ -269,7 +294,7 @@ function SurrenderForm({ isAdmin, onDone }) {
           {penalties.map(p => (
             <div key={p.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#fca5a5" }}><span>− {penaltyItem(p) || "(unnamed penalty)"}</span><span>−{inr(p.amount)}</span></div>
           ))}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.inkLight }}><span>Stock: +{returned || 0} empty {productLabel(f.productId)}{missing > 0 ? ` (${missing} missing — not added)` : ""}</span><span></span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.inkLight }}><span>Stock: +{returned || 0} empty {productLabel(f.productId, products)}{missing > 0 ? ` (${missing} missing — not added)` : ""}</span><span></span></div>
           <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,.2)", paddingTop: 6, marginTop: 2 }}>
             <span style={{ fontWeight: 700 }}>NET CASH PAID OUT</span>
             <span className={`coh-amount${netPaid < 0 ? " negative" : ""}`} style={{ fontSize: 24 }}>{inr(netPaid)}</span>

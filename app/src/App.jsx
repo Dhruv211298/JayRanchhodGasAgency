@@ -441,7 +441,7 @@ export default function App() {
 
       <main className="main">
         {/* User Tabs */}
-        {tab === "entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} products={products} />}
+        {tab === "entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} products={products} onConnectionsChanged={onConnectionsChanged} isAdmin={false} />}
         {tab === "history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("entry"); }} products={products} />}
         {tab === "credits" && <PendingCredits pending={pending} onRecord={recordPayment} products={products} />}
         {tab === "connections" && <ConnectionsTab isAdmin={false} onChanged={onConnectionsChanged} prices={prices} />}
@@ -449,7 +449,7 @@ export default function App() {
         {tab === "salary" && <SalaryReport entries={entries} employees={employees} />}
 
         {/* Admin Tabs */}
-        {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} />}
+        {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} onConnectionsChanged={onConnectionsChanged} />}
         {tab === "admin-history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("admin-entry"); }} isAdmin={true} onDelete={handleDeleteEntry} products={products} />}
         {tab === "admin-dashboard" && <AdminDashboard entries={entries} pending={pending} prices={prices} commissions={commissions} products={products} onViewDay={(e) => { setEntry(e); setTab("admin-entry"); }} />}
         {tab === "admin-connections" && <ConnectionsTab isAdmin={true} onChanged={onConnectionsChanged} prices={prices} />}
