@@ -1633,15 +1633,31 @@ app.get('/api/products', verifyToken, async (req, res) => {
 
 app.post('/api/products', verifyToken, requireAdmin, async (req, res) => {
   const { id, label, shortName, sku, fallbackRate, fallbackSbc, fallbackDbc, category, sortOrder } = req.body || {};
-  const cleanId = strField(id, 50).toLowerCase();
   const cleanLabel = strField(label, 100);
   const cleanShort = strField(shortName, 50);
   const cleanSku = strField(sku, 50);
-  const cleanCat = strField(category, 20) || 'cylinder';
+  const cleanCat = strField(category, 20).toLowerCase() === 'accessory' ? 'accessory' : 'cylinder';
   const order = Number.isInteger(Number(sortOrder)) ? Number(sortOrder) : 0;
   const rate = num(fallbackRate);
   const sbc = num(fallbackSbc);
   const dbc = num(fallbackDbc);
+
+  // Auto-generate ID if empty or missing
+  let cleanId = strField(id, 50).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!cleanId) {
+    if (cleanCat === 'cylinder') {
+      const match = cleanShort.match(/(\d+(?:\.\d+)?)/);
+      if (match) {
+        cleanId = `p${match[1].replace('.', '_')}`;
+      } else {
+        const slug = cleanShort.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15);
+        cleanId = slug ? `cyl_${slug}` : `cyl_${Date.now().toString(36)}`;
+      }
+    } else {
+      const slug = (cleanShort || cleanLabel).toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 15);
+      cleanId = slug ? `acc_${slug}` : `acc_${Date.now().toString(36)}`;
+    }
+  }
 
   if (!cleanId || !/^[a-z0-9_-]{2,50}$/.test(cleanId)) {
     return res.status(400).json({ error: 'Product Code/ID must be 2-50 characters (letters, numbers, hyphens or underscores only, no spaces).' });
@@ -1656,7 +1672,7 @@ app.post('/api/products', verifyToken, requireAdmin, async (req, res) => {
     const [existing] = await connection.query('SELECT id FROM products WHERE id = ? FOR UPDATE', [cleanId]);
     if (existing.length > 0) {
       await connection.rollback();
-      return res.status(400).json({ error: `Product ID "${cleanId}" already exists.` });
+      return res.status(400).json({ error: `Product ID "${cleanId}" already exists. Please choose a different short name or code.` });
     }
 
     await connection.query(
@@ -1686,7 +1702,7 @@ app.post('/api/products', verifyToken, requireAdmin, async (req, res) => {
 
 app.put('/api/products/:id', verifyToken, requireAdmin, async (req, res) => {
   const targetId = strField(req.params.id, 50).toLowerCase();
-  const { label, shortName, sku, fallbackRate, fallbackSbc, fallbackDbc, sortOrder, isActive } = req.body || {};
+  const { label, shortName, sku, fallbackRate, fallbackSbc, fallbackDbc, category, sortOrder, isActive } = req.body || {};
   const cleanLabel = strField(label, 100);
   const cleanShort = strField(shortName, 50);
   const cleanSku = strField(sku, 50);
@@ -1709,12 +1725,13 @@ app.put('/api/products/:id', verifyToken, requireAdmin, async (req, res) => {
     }
 
     const activeVal = isActive !== undefined ? (isActive ? 1 : 0) : existing[0].is_active;
+    const cleanCat = category !== undefined ? (strField(category, 20).toLowerCase() === 'accessory' ? 'accessory' : 'cylinder') : (existing[0].category || 'cylinder');
 
     await connection.query(
       `UPDATE products 
-       SET label = ?, short_name = ?, sku = ?, fallback_rate = ?, fallback_sbc = ?, fallback_dbc = ?, sort_order = ?, is_active = ?
+       SET label = ?, short_name = ?, sku = ?, fallback_rate = ?, fallback_sbc = ?, fallback_dbc = ?, category = ?, sort_order = ?, is_active = ?
        WHERE id = ?`,
-      [cleanLabel, cleanShort, cleanSku, rate, sbc, dbc, order, activeVal, targetId]
+      [cleanLabel, cleanShort, cleanSku, rate, sbc, dbc, cleanCat, order, activeVal, targetId]
     );
 
     await writeAudit(connection, {
@@ -1722,7 +1739,7 @@ app.put('/api/products/:id', verifyToken, requireAdmin, async (req, res) => {
       entityType: 'product',
       entityId: targetId,
       req,
-      details: { id: targetId, label: cleanLabel, short: cleanShort, sku: cleanSku, rate, sbc, dbc, isActive: activeVal }
+      details: { id: targetId, label: cleanLabel, short: cleanShort, sku: cleanSku, rate, sbc, dbc, category: cleanCat, isActive: activeVal }
     });
 
     await connection.commit();
@@ -1945,12 +1962,18 @@ async function findDuplicate(conn, key) {
 /* Append-only audit row. Declared as a function so it is hoisted for the
    daily-entry routes above. `details` is stored as JSON. */
 async function writeAudit(conn, { eventType, entityType, entityId, req, eventDate, details, idempotencyKey }) {
-  await conn.query(
-    `INSERT INTO audit_log (id, event_type, entity_type, entity_id, actor, actor_role, event_date, details, idempotency_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [newId(), eventType, entityType, String(entityId), req.user.username, req.user.role, eventDate || null,
-     details ? JSON.stringify(details) : null, idempotencyKey || null]
-  );
+  try {
+    const username = (req && req.user && req.user.username) || 'system';
+    const role = (req && req.user && req.user.role) || 'admin';
+    await conn.query(
+      `INSERT INTO audit_log (event_type, entity_type, entity_id, actor, actor_username, actor_role, event_date, details, idempotency_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [eventType, entityType, String(entityId), username, username, role, eventDate || null,
+       details ? JSON.stringify(details) : null, idempotencyKey || null]
+    );
+  } catch (err) {
+    console.warn('writeAudit non-fatal warning:', err.message);
+  }
 }
 
 async function productExists(conn, productId) {

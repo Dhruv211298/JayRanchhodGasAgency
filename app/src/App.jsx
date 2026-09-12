@@ -395,7 +395,7 @@ export default function App() {
         {tab === "admin-connections" && <ConnectionsTab isAdmin={true} onChanged={onConnectionsChanged} prices={prices} />}
         {tab === "admin-prices" && <AdminPriceHistory prices={prices} setPrices={setPrices} products={products} />}
         {tab === "admin-comm" && <AdminCommission commissions={commissions} setCommissions={setCommissions} products={products} />}
-        {tab === "admin-products" && <AdminProductMaster onProductsChanged={() => loadData(entry.date)} />}
+        {tab === "admin-products" && <AdminProductMaster products={products} onProductsChanged={() => loadData(entry.date)} />}
         {tab === "admin-reports" && <AdminDayReports entries={entries} commissions={commissions} products={products} />}
         {tab === "admin-salary" && <AdminSalaryReport entries={entries} employees={employees} />}
         {tab === "admin-credits" && <AdminCreditOverview pending={pending} products={products} />}
