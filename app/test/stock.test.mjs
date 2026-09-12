@@ -98,6 +98,16 @@ t("empties enter from sales, credit sales and recoveries", () => {
   assert.equal(emptyInFor(e, e.products[0]), 19);
 });
 
+t("SBC and DBC sales deduct filled stock but do NOT add empty cylinders (new connection)", () => {
+  const e = { products: [P({ openingStock: 100, sell: 10, online: 4, sbc: 3, dbc: 2 })] };
+  // Filled stock closing: 100 - (10 + 4 + 3 + 2) = 81
+  assert.equal(computeClosingStock(e, e.products[0]), 81);
+  // Empty cylinders received: ONLY refill sales (10 cash + 4 online = 14).
+  // SBC (3) and DBC (2) are new connection issues where a new filled cylinder is issued
+  // without receiving an empty cylinder back.
+  assert.equal(emptyInFor(e, e.products[0]), 14);
+});
+
 t("empties leave only on plant despatch", () => {
   const e = { hasArrival: true, arrivals: [{ productId: "p14", emptyReturned: 40 }] };
   assert.equal(emptyDespatchedFor(e, "p14"), 40);

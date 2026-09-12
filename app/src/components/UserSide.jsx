@@ -389,15 +389,15 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                     { label: "Rate (₹)", align: "right", width: 85 },
                     { label: "Cash Qty", align: "right", width: 75 },
                     { label: "Online Qty", align: "right", width: 75 },
-                    { label: "SBC", align: "right", width: 65 },
-                    { label: "DBC", align: "right", width: 65 },
+                    { label: "SBC", align: "right", width: 65, title: "Single Bottle Connection — new filled bottle issued, no empty cylinder received" },
+                    { label: "DBC", align: "right", width: 65, title: "Double Bottle Connection — new filled bottle issued, no empty cylinder received" },
                     { label: "Cash Total", align: "right", width: 105 },
                     { label: "Online Total", align: "right", width: 105 },
                     { label: "Closing", align: "right", width: 75 },
                     { label: "⚠️ Shortage / Stolen", align: "right", width: 90 },
                     { label: "Remarks", align: "left", width: 130 }
                   ].map((xh) => (
-                    <th key={xh.label} style={{
+                    <th key={xh.label} title={xh.title} style={{
                       textAlign: xh.align,
                       minWidth: xh.width,
                       width: xh.width,
@@ -429,8 +429,8 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                       <td><input className="inp-inline" type="number" value={p.rate} readOnly style={{ minWidth: 65, fontWeight: 600 }} /></td>
                       <td><input className="inp-inline" type="number" value={p.sell} onChange={(e) => setProduct(p.id, "sell", e.target.value)} readOnly={!canEdit} style={{ minWidth: 55 }} /></td>
                       <td><input className="inp-inline" type="number" value={p.online} onChange={(e) => setProduct(p.id, "online", e.target.value)} readOnly={!canEdit} style={{ minWidth: 55 }} /></td>
-                      <td><input className="inp-inline" type="number" value={p.sbc} onChange={(e) => setProduct(p.id, "sbc", e.target.value)} readOnly={!canEdit} style={{ minWidth: 50 }} /></td>
-                      <td><input className="inp-inline" type="number" value={p.dbc} onChange={(e) => setProduct(p.id, "dbc", e.target.value)} readOnly={!canEdit} style={{ minWidth: 50 }} /></td>
+                      <td><input className="inp-inline" type="number" placeholder="0" title="SBC: New filled issued, no empty cylinder returned" value={p.sbc} onChange={(e) => setProduct(p.id, "sbc", e.target.value)} readOnly={!canEdit} style={{ minWidth: 50 }} /></td>
+                      <td><input className="inp-inline" type="number" placeholder="0" title="DBC: New filled issued, no empty cylinder returned" value={p.dbc} onChange={(e) => setProduct(p.id, "dbc", e.target.value)} readOnly={!canEdit} style={{ minWidth: 50 }} /></td>
                       <td style={{ color: T.success, fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }} title={`Refill (Cash): ${inr(num(p.sell) * num(p.rate))} | SBC: ${inr(num(p.sbc) * num(p.sbcRate))} | DBC: ${inr(num(p.dbc) * num(p.dbcRate))}`}>{inr(cashTotal)}</td>
                       <td style={{ color: T.blue, fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }}>{inr(onlineTotal)}</td>
                       <td style={{ color: closing < 0 ? T.danger : T.ink, fontWeight: 600, textAlign: "right", whiteSpace: "nowrap" }}>{closing}<ConnectionStockNote entry={entry} productId={p.id} /></td>
@@ -1174,7 +1174,7 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
             </table>
           </div>
           <div style={{ padding: "10px 16px", fontSize: 11, color: T.inkLight, fontStyle: "italic", borderTop: "1px solid rgba(0,119,255,0.1)" }}>
-            * Full = Opening + Received − Credit Filled − Sold(Cash+Online+SBC+DBC) − Connection Cylinders Issued | Empty = Prev Godown Empty (opening) + Empties IN today (incl. surrender returns) − Sent to Plant | ⚠️ Shortage/Stolen = reminder from Products section above
+            * Full = Opening + Received − Credit Filled − Sold(Cash+Online+SBC+DBC) − Connection Cylinders Issued | Empty = Prev Godown Empty (opening) + Empties IN today (Cash &amp; Online refills + Credit/Recovery returns + Surrenders; SBC/DBC issue new bottles without returning empties) − Sent to Plant | ⚠️ Shortage/Stolen = reminder from Products section above
           </div>
         </div>
       </div>

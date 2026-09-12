@@ -151,9 +151,14 @@ export const computeClosingStock = (entry, product) =>
   + filledReceivedFor(entry, product.id)
   - outwardFilledFor(entry, product);
 
-/** Empty cylinders entering the godown on this day, from every source. */
+/**
+ * Empty cylinders entering the godown on this day, from every source.
+ * Note: Refill sales (cash sell + online) exchange an empty cylinder for a filled one.
+ * SBC and DBC are new connection issues: a new filled bottle is issued, but NO empty
+ * cylinder is received from the customer because it is a new connection.
+ */
 export const emptyInFor = (entry, product) =>
-  num(product.sell) + num(product.online) + num(product.sbc) + num(product.dbc)
+  num(product.sell) + num(product.online)
   + creditEmptyFor(entry, product.id)
   + recoveryEmptyFor(entry, product.id)
   + connectionEmptyInFor(entry, product.id);
