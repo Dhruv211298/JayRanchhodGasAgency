@@ -30,11 +30,20 @@ export function ConnectionsDayCard({ entry, calcs, products = PRODUCTS, onConnec
     onConnectionsChanged && onConnectionsChanged();
   };
 
-  const handleVoid = async (e) => {
-    const ok = window.confirm(`Delete this ${e.eventType || "connection"} entry for ${fmtDate(entry.date)}? This will reverse its stock and cash effects.`);
-    if (!ok) return;
+  const handleVoid = async (evtObj) => {
+    const { value: confirmed } = await Swal.fire({
+      title: "Delete this entry?",
+      text: `This will reverse its stock and cash effects for ${fmtDate(entry.date)}.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#ef4444",
+      reverseButtons: true,
+    });
+    if (!confirmed) return;
     try {
-      await api.deleteConnectionEvent(e.id, "");
+      await api.deleteConnectionEvent(evtObj.id, "");
       onConnectionsChanged && onConnectionsChanged();
     } catch (err) {
       Swal.fire({ title: "Could not delete", text: err.message, icon: "error", confirmButtonColor: "#ef4444" });
