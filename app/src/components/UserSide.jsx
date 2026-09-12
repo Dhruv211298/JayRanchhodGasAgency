@@ -181,50 +181,126 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
         </div>
       )}
 
-      <div className="g3" style={{ marginBottom: 14 }}>
-        <div className="card">
-          <div className="card-head"><span className="card-head-title">📅 Date</span></div>
-          <div className="card-body">
-            <input className="inp" type="date" value={entry.date} max={todayStr()} onChange={(e) => onDateChange ? onDateChange(e.target.value) : set("date", e.target.value)} />
+      <div className="g3" style={{ marginBottom: 18 }}>
+        <div className="card" style={{ marginBottom: 0 }}>
+          <div className="card-head" style={{ padding: "10px 16px" }}>
+            <span className="card-head-title">📅 Accounting Date</span>
+          </div>
+          <div className="card-body" style={{ padding: "12px 16px" }}>
+            <input
+              className="inp"
+              type="date"
+              value={entry.date}
+              max={todayStr()}
+              onChange={(e) => onDateChange ? onDateChange(e.target.value) : set("date", e.target.value)}
+              style={{ fontWeight: 600, fontSize: 14 }}
+            />
           </div>
         </div>
-        <div className="card">
-          <div className="card-head"><span className="card-head-title">💰 Opening Cash</span></div>
-          <div className="card-body">
-            <input className="inp" type="number" placeholder="₹ 0" value={entry.openingCash} onChange={(e) => set("openingCash", e.target.value)} readOnly={!canEdit} />
+
+        <div className="card" style={{ marginBottom: 0 }}>
+          <div className="card-head" style={{ padding: "10px 16px" }}>
+            <span className="card-head-title">💰 Opening Cash Balance</span>
+          </div>
+          <div className="card-body" style={{ padding: "12px 16px" }}>
+            <input
+              className="inp"
+              type="number"
+              placeholder="₹ 0"
+              value={entry.openingCash}
+              onChange={(e) => set("openingCash", e.target.value)}
+              readOnly={!canEdit}
+              style={{ fontWeight: 700, fontSize: 15, color: T.ink }}
+            />
           </div>
         </div>
-        <div className="card">
-          <div className="card-head"><span className="card-head-title">🏦 BOB Bank</span></div>
-          <div className="card-body">
-            <input className="inp" type="number" placeholder="₹ 0" value={entry.bob} onChange={(e) => set("bob", e.target.value)} readOnly={!canEdit} />
+
+        <div className="card" style={{ marginBottom: 0 }}>
+          <div className="card-head" style={{ padding: "10px 16px" }}>
+            <span className="card-head-title">🏦 Bank of Baroda (Deposit)</span>
+          </div>
+          <div className="card-body" style={{ padding: "12px 16px" }}>
+            <input
+              className="inp"
+              type="number"
+              placeholder="₹ 0"
+              value={entry.bob}
+              onChange={(e) => set("bob", e.target.value)}
+              readOnly={!canEdit}
+              style={{ fontWeight: 700, fontSize: 15, color: T.blue }}
+            />
           </div>
         </div>
       </div>
 
       {/* Vehicle Arrival Question */}
-      <div className="card" style={{ marginBottom: 14, borderLeft: entry.hasArrival ? `4px solid ${T.success}` : "none" }}>
-        <div className="card-body" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: entry.hasArrival ? `1px solid ${T.border}` : "none" }}>
-          <span style={{ fontWeight: 600, color: T.inkMid }}>🚚 Did a new gas cylinder vehicle arrive today?</span>
-          <div style={{ display: "flex", gap: 8 }}>
+      <div className="card" style={{ marginBottom: 18, borderLeft: entry.hasArrival ? `4px solid ${T.success}` : `4px solid ${T.border}` }}>
+        <div className="card-body" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: entry.hasArrival ? T.successBg : "#f1f5f9",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 20
+            }}>
+              🚚
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, color: T.ink, fontSize: 14 }}>Did a new gas cylinder vehicle arrive today?</div>
+              <div style={{ fontSize: 11.5, color: T.inkLight }}>Record plant delivery arrivals and turnaround empties returned</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, background: "#f1f5f9", padding: 4, borderRadius: 10 }}>
             <button
-              className={`btn-icon ${entry.hasArrival ? "active" : ""}`}
-              style={{ width: 60, borderRadius: 6, background: entry.hasArrival ? T.success : "transparent", color: entry.hasArrival ? "#fff" : T.inkMid, border: `1px solid ${entry.hasArrival ? T.success : T.border}` }}
+              type="button"
+              style={{
+                padding: "7px 18px",
+                borderRadius: 8,
+                border: "none",
+                fontWeight: 700,
+                fontSize: 12,
+                letterSpacing: "0.4px",
+                cursor: canEdit ? "pointer" : "default",
+                background: entry.hasArrival ? T.success : "transparent",
+                color: entry.hasArrival ? "#fff" : "#64748b",
+                boxShadow: entry.hasArrival ? "0 2px 8px rgba(5,150,105,0.3)" : "none",
+                transition: "all 0.18s ease"
+              }}
               onClick={() => canEdit && set("hasArrival", true)}
               disabled={!canEdit}
-            >Yes</button>
+            >
+              Yes, Arrived
+            </button>
             <button
-              className={`btn-icon ${!entry.hasArrival ? "active" : ""}`}
-              style={{ width: 60, borderRadius: 6, background: !entry.hasArrival ? T.danger : "transparent", color: !entry.hasArrival ? "#fff" : T.inkMid, border: `1px solid ${!entry.hasArrival ? T.danger : T.border}` }}
+              type="button"
+              style={{
+                padding: "7px 18px",
+                borderRadius: 8,
+                border: "none",
+                fontWeight: 700,
+                fontSize: 12,
+                letterSpacing: "0.4px",
+                cursor: canEdit ? "pointer" : "default",
+                background: !entry.hasArrival ? "#64748b" : "transparent",
+                color: !entry.hasArrival ? "#fff" : "#64748b",
+                boxShadow: !entry.hasArrival ? "0 2px 8px rgba(100,116,139,0.3)" : "none",
+                transition: "all 0.18s ease"
+              }}
               onClick={() => canEdit && set("hasArrival", false)}
               disabled={!canEdit}
-            >No</button>
+            >
+              No Arrival
+            </button>
           </div>
         </div>
 
         {entry.hasArrival && (
           <div className="fade-in">
-            <div className="card-head" style={{ borderTop: "none" }}>
+            <div className="card-head" style={{ borderTop: `1px solid ${T.border}`, background: "#f8fafc" }}>
               <span className="card-head-title">📦 New Vehicle Arrival Details From Plant</span>
             </div>
             <div className="card-body" style={{ padding: 0 }}>
@@ -233,8 +309,8 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                   <thead>
                     <tr>
                       <th>Product</th>
-                      <th style={{ textAlign: "right" }}>Filled Received</th>
-                      <th style={{ textAlign: "right" }}>Empty Returned</th>
+                      <th style={{ textAlign: "center" }}>Filled Received</th>
+                      <th style={{ textAlign: "center" }}>Empty Returned</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -242,8 +318,8 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                       const p = (products || PRODUCTS).find(prod => prod.id === item.productId);
                       return (
                         <tr key={item.productId}>
-                          <td style={{ fontWeight: 600, color: T.accent }}>{p ? p.label : item.productId}</td>
-                          <td>
+                          <td style={{ fontWeight: 700, color: T.accent, fontSize: 13.5 }}>{p ? p.label : item.productId}</td>
+                          <td style={{ textAlign: "center" }}>
                             <input
                               className="inp-inline"
                               type="number"
@@ -255,9 +331,10 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                                 set("arrivals", newArr);
                               }}
                               readOnly={!canEdit}
+                              style={{ width: 80, fontWeight: 700, color: T.success }}
                             />
                           </td>
-                          <td>
+                          <td style={{ textAlign: "center" }}>
                             <input
                               className="inp-inline"
                               type="number"
@@ -269,6 +346,7 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                                 set("arrivals", newArr);
                               }}
                               readOnly={!canEdit}
+                              style={{ width: 80, fontWeight: 700, color: T.danger }}
                             />
                           </td>
                         </tr>
@@ -283,13 +361,19 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
       </div>
 
       {/* Cylinders */}
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head" style={{ flexWrap: "wrap", gap: 8 }}>
+      <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card-head" style={{ flexWrap: "wrap", gap: 10, padding: "14px 20px" }}>
           <span className="card-head-title">🛢️ Cylinder Stock & Sales</span>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", fontSize: 13, fontWeight: 700 }}>
-            <span style={{ color: T.success }}>Cash: {inr(calcs.originalCashSales)}</span>
-            <span style={{ color: T.blue }}>Online: {inr(calcs.totalOnlineSales)}</span>
-            <span style={{ color: T.ink, borderLeft: "1px solid #ccc", paddingLeft: 12 }}>Total: {inr(calcs.originalSales)}</span>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 12.5, fontWeight: 700 }}>
+            <span style={{ background: T.successBg, color: T.success, padding: "4px 12px", borderRadius: 20, border: "1px solid #a7f3d0" }}>
+              Cash: {inr(calcs.originalCashSales)}
+            </span>
+            <span style={{ background: T.blueBg, color: T.blue, padding: "4px 12px", borderRadius: 20, border: "1px solid #bfdbfe" }}>
+              Online: {inr(calcs.totalOnlineSales)}
+            </span>
+            <span style={{ background: "#f8fafc", color: T.ink, padding: "4px 14px", borderRadius: 20, border: "1px solid #e2e8f0" }}>
+              Gross: {inr(calcs.originalSales)}
+            </span>
           </div>
         </div>
         <div className="card-body" style={{ padding: 0 }}>
@@ -1093,17 +1177,23 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
         </div>
       </div>
 
-      <div className="coh-bar" style={{ marginBottom: 14, flexDirection: "column", alignItems: "stretch", gap: 0, padding: 0 }}>
+      <div className="coh-bar" style={{ marginBottom: 18, flexDirection: "column", alignItems: "stretch", gap: 0, padding: 0, overflow: "hidden" }}>
         {/* Header row */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px 8px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 22px", background: "linear-gradient(135deg, #0b1120 0%, #0f172a 100%)" }}>
           <div>
-            <div className="coh-label">Cash on Hand</div>
-            <div className="coh-formula">Opening + Cash Sales + Accessories + Credit Received + Other Cash Credits + Connection Payments (Cash) − Online (→Bank) − Expenses − Vehicle − Salary − Connection Refunds − BOB Bank</div>
+            <div className="coh-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span>💵</span> Net Cash on Hand
+            </div>
+            <div className="coh-formula" style={{ fontSize: 11.5, color: "#94a3b8" }}>
+              Opening + Cash Sales + Accessories + Recoveries − Expenses − Vehicle − Salary − BOB Bank
+            </div>
           </div>
-          <div className={`coh-amount${calcs.cashOnHand < 0 ? " negative" : ""}`}>{inr(calcs.cashOnHand)}</div>
+          <div className={`coh-amount${calcs.cashOnHand < 0 ? " negative" : ""}`} style={{ fontSize: 32 }}>
+            {inr(calcs.cashOnHand)}
+          </div>
         </div>
         {/* Breakdown */}
-        <div style={{ borderTop: "1px solid rgba(0,119,255,0.12)", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "1px", background: "rgba(0,119,255,0.06)" }}>
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "1px", background: "#e2e8f0" }}>
           {[
             { label: "Opening Cash", val: num(entry.openingCash), color: T.ink },
             { label: "Cash Sales (+)", val: calcs.totalCashSales, color: T.success },
@@ -1114,28 +1204,39 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
             { label: "Connection Payments (Cash) (+)", val: calcs.totalConnectionPaymentsCash, color: T.success },
             { label: "Cheque/Online (+)", val: calcs.totalCheque, color: T.success },
             { label: "Connection Payments (Online)", val: calcs.totalConnectionPaymentsOnline, color: T.blue, sub: "info only — not in cash" },
-            { label: "Online/Chq → Bank (−)", val: calcs.totalOnlineSales + calcs.totalCheque, color: "#e67e22", note: "auto" },
+            { label: "Online/Chq → Bank (−)", val: calcs.totalOnlineSales + calcs.totalCheque, color: "#ea580c", note: "auto" },
             { label: "Expenses (−)", val: calcs.totalExpenses, color: T.danger },
             { label: "Connection Refunds (−)", val: calcs.totalConnectionRefunds, color: T.danger },
             { label: "Vehicle Exp (−)", val: calcs.totalVehicleExp, color: T.danger },
             { label: "Salary/Adv (−)", val: calcs.totalSalaryPayments, color: T.danger },
             { label: "BOB Bank Deposit (−)", val: num(entry.bob), color: T.danger },
           ].map(({ label, val, color, note, sub }) => (
-            <div key={label} style={{ background: "white", padding: "6px 12px", display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 10, color: T.inkLight, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                {label} {note && <span style={{ background: "#e67e22", color: "#fff", borderRadius: 3, padding: "0 4px", fontSize: 9 }}>AUTO</span>}
+            <div key={label} style={{ background: "#ffffff", padding: "8px 14px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>
+                {label} {note && <span style={{ background: "#ea580c", color: "#fff", borderRadius: 3, padding: "0 4px", fontSize: 8.5 }}>AUTO</span>}
               </span>
-              <span style={{ fontSize: 13, fontWeight: 700, color }}>{inr(val)}</span>
-              {sub && <span style={{ fontSize: 9, color: T.inkLight, marginTop: 2 }}>{sub}</span>}
+              <span style={{ fontSize: 13.5, fontWeight: 700, color, marginTop: 2 }}>{inr(val)}</span>
+              {sub && <span style={{ fontSize: 9.5, color: "#94a3b8", marginTop: 2 }}>{sub}</span>}
             </div>
           ))}
         </div>
       </div>
 
-
       {canEdit && (
-        <div style={{ textAlign: "right" }}>
-          <button className="btn-primary" onClick={onSave}>💾 Save Entry</button>
+        <div style={{ textAlign: "right", marginTop: 20, marginBottom: 28 }}>
+          <button
+            className="btn-primary"
+            style={{
+              padding: "13px 32px",
+              fontSize: 13,
+              fontWeight: 800,
+              borderRadius: 10,
+              letterSpacing: "0.5px"
+            }}
+            onClick={onSave}
+          >
+            <span>💾</span> SAVE TODAY'S ENTRY
+          </button>
         </div>
       )}
     </div>
@@ -1437,7 +1538,7 @@ export function PendingCredits({ pending, onRecord, products = PRODUCTS }) {
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 16 }}>
             <div style={{ background: T.card, borderRadius: 12, padding: 24, width: "100%", maxWidth: 400, boxShadow: T.shadowMd }}>
-              <div style={{ fontFamily: "'Fraunces',serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Record Payment</div>
+              <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 4, color: T.ink }}>Record Payment</div>
               <div style={{ fontSize: 12, color: T.inkLight, marginBottom: 18 }}>
                 {item?.customerName} · Remaining: <strong style={{ color: T.danger }}>{inr(remaining)}</strong>
               </div>

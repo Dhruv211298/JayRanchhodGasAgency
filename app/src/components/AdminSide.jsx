@@ -145,20 +145,32 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
   return (
     <div className="fade-in">
       {/* Month & Year Selection Toolbar */}
-      <div className="card" style={{ marginBottom: 16, padding: "12px 18px", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, background: "#ffffff", border: `1px solid ${T.border}`, borderRadius: 10, boxShadow: "0 2px 6px rgba(0,0,0,0.03)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 20 }}>📅</span>
+      <div className="card" style={{ marginBottom: 18, padding: "14px 20px", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 14, background: "#ffffff", border: `1px solid ${T.border}`, borderRadius: 14, boxShadow: T.shadowSm }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 40,
+            height: 40,
+            borderRadius: 10,
+            background: "rgba(37, 99, 235, 0.08)",
+            border: "1px solid rgba(37, 99, 235, 0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 20
+          }}>
+            📅
+          </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: T.ink, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 18, color: T.ink, display: "flex", alignItems: "center", gap: 8 }}>
               {monthNames[selMonthNum - 1]} {selYear}
               {selectedMonth === currentMonthStr && <span className="badge badge-success" style={{ fontSize: 10, padding: "2px 8px" }}>Current Month</span>}
             </div>
-            <div style={{ fontSize: 11, color: T.inkLight }}>{monthEntries.length} daily entries recorded</div>
+            <div style={{ fontSize: 12, color: T.inkLight, marginTop: 2 }}>{monthEntries.length} daily entries recorded</div>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn-ghost" onClick={handlePrevMonth} title="Previous Month" style={{ padding: "6px 12px", fontWeight: 700 }}>
+          <button className="btn-ghost" onClick={handlePrevMonth} title="Previous Month" style={{ padding: "7px 14px", fontWeight: 700 }}>
             ◀ Prev
           </button>
           
@@ -166,7 +178,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
             className="inp" 
             value={selMonthNum} 
             onChange={(e) => handleMonthChange(Number(e.target.value))}
-            style={{ width: 135, fontWeight: 600, padding: "6px 10px" }}
+            style={{ width: 140, fontWeight: 600, padding: "7px 12px" }}
           >
             {monthNames.map((name, idx) => (
               <option key={idx + 1} value={idx + 1}>{name}</option>
@@ -177,14 +189,14 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
             className="inp" 
             value={selYear} 
             onChange={(e) => handleYearChange(Number(e.target.value))}
-            style={{ width: 85, fontWeight: 600, padding: "6px 10px" }}
+            style={{ width: 90, fontWeight: 600, padding: "7px 12px" }}
           >
             {yearOptions.map(y => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
 
-          <button className="btn-ghost" onClick={handleNextMonth} title="Next Month" style={{ padding: "6px 12px", fontWeight: 700 }}>
+          <button className="btn-ghost" onClick={handleNextMonth} title="Next Month" style={{ padding: "7px 14px", fontWeight: 700 }}>
             Next ▶
           </button>
 
@@ -192,7 +204,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
             <button 
               className="btn-ghost" 
               onClick={() => setSelectedMonth(currentMonthStr)} 
-              style={{ borderColor: T.blue, color: T.blue, fontWeight: 700, padding: "6px 12px" }}
+              style={{ borderColor: T.blue, color: T.blue, fontWeight: 700, padding: "7px 14px" }}
             >
               Current Month
             </button>
@@ -713,7 +725,7 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Vehicle Expenses</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalVehicleExp)}</span></div>
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Salary / Advance</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalSalaryPayments)}</span></div>
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Cheque/Online</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalCheque)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",marginTop:8,borderTop:"2px solid #ccc"}}><span style={{fontSize:12,fontWeight:700,color:T.inkMid}}>CASH ON HAND</span><span style={{fontFamily:"'Fraunces',serif",fontSize:20,fontWeight:700,color:calcs.cashOnHand<0?T.danger:T.success}}>{inr(calcs.cashOnHand)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",marginTop:8,borderTop:"2px solid #e2e8f0"}}><span style={{fontSize:12,fontWeight:700,color:T.inkMid}}>CASH ON HAND</span><span style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:700,color:calcs.cashOnHand<0?T.danger:T.success}}>{inr(calcs.cashOnHand)}</span></div>
           </div>
         </div>
         
@@ -1235,7 +1247,7 @@ export function AdminVehicleMaster() {
       {showModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
           <div style={{ background: T.card, borderRadius: 14, padding: 28, width: "100%", maxWidth: 520, boxShadow: T.shadowMd, maxHeight: "90vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><div><div style={{ fontFamily: "'Fraunces',serif", fontSize: 20, fontWeight: 700 }}>{editId ? "✏️ Edit Vehicle" : "🚛 Add New Vehicle"}</div></div><button className="btn-icon" onClick={closeModal}>×</button></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 20, fontWeight: 700 }}>{editId ? "✏️ Edit Vehicle" : "🚛 Add New Vehicle"}</div></div><button className="btn-icon" onClick={closeModal}>×</button></div>
             {err && <div className="login-err">⚠️ {err}</div>}
             <div className="g2"><div className="field"><label>Vehicle Number *</label><input className="inp" type="text" value={form.vehicleNo} onChange={e => setForm({ ...form, vehicleNo: e.target.value.toUpperCase() })} /></div><div className="field"><label>Vehicle Type</label><select className="inp" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>{VEHICLE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div></div>
             <div className="field"><label>Cylinder Capacity</label><input className="inp" type="number" value={form.capacity} onChange={e => setForm({ ...form, capacity: e.target.value })} /></div>
@@ -1345,7 +1357,7 @@ export function AdminEmployeeMaster() {
       {showModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
           <div style={{ background: T.card, borderRadius: 14, padding: 28, width: "100%", maxWidth: 540, boxShadow: T.shadowMd, maxHeight: "92vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><div><div style={{ fontFamily: "'Fraunces',serif", fontSize: 20, fontWeight: 700 }}>{editId ? "✏️ Edit Employee" : "👤 Add New Employee"}</div></div><button className="btn-icon" onClick={closeModal}>×</button></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}><div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 20, fontWeight: 700 }}>{editId ? "✏️ Edit Employee" : "👤 Add New Employee"}</div></div><button className="btn-icon" onClick={closeModal}>×</button></div>
             {err && <div className="login-err">⚠️ {err}</div>}
             <div className="g2"><div className="field"><label>Full Name *</label><input className="inp" type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div><div className="field"><label>Role</label><select className="inp" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>{EMP_ROLES.map(r => <option key={r} value={r}>{r}</option>)}</select></div></div>
             <div className="g2"><div className="field"><label>Monthly Salary (₹)</label><input className="inp" type="number" value={form.salary} onChange={e => setForm({ ...form, salary: e.target.value })} /></div><div className="field"><label>Phone</label><input className="inp" type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div></div>

@@ -300,7 +300,7 @@ export default function App() {
 
   if (loadError) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: T.bg, fontFamily: "'DM Sans',sans-serif", color: T.inkMid, gap: 14, padding: 20, textAlign: "center" }}>
-      <div style={{ fontFamily: "'Fraunces',serif", fontSize: 22, color: T.danger }}>Could not load data</div>
+      <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 22, fontWeight: 700, color: T.danger }}>Could not load data</div>
       <div style={{ fontSize: 13, maxWidth: 420 }}>{loadError}</div>
       <div style={{ fontSize: 12, color: T.inkLight, maxWidth: 420 }}>Nothing has been changed. The screen is blocked rather than shown empty so that a blank day cannot be saved over real data by mistake.</div>
       <div style={{ display: "flex", gap: 10 }}>
@@ -346,17 +346,10 @@ export default function App() {
       {/* Header */}
       <header className="hdr">
         <div className="hdr-brand">
-          <div style={{
-            height: 44,
-            flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center"
-          }}>
+          <div className="hdr-logo-box">
             <img
               src="/bpcl_logo.png"
               alt="Bharat Gas"
-              style={{ height: "100%", width: "auto", objectFit: "contain" }}
             />
           </div>
           <div>
@@ -364,23 +357,72 @@ export default function App() {
             <div className="hdr-sub">Bharat LPG · {authedRole === "admin" ? "Admin Portal" : "Daily Management"}</div>
           </div>
         </div>
-        <div style={{display:"flex", alignItems:"center", gap: 16}}>
-          <div className="hdr-date">{fmtDate(todayStr())}</div>
-          <button className="btn-ghost" style={{borderColor: "#444", color: "#ccc", padding: "4px 10px", fontSize: 10}} onClick={handleLogout}>LOGOUT</button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {/* Live system status */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(16, 185, 129, 0.12)",
+            border: "1px solid rgba(16, 185, 129, 0.25)",
+            padding: "4px 10px",
+            borderRadius: 20,
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#34d399",
+            letterSpacing: "0.5px"
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981" }}></span>
+            <span>SYSTEM ACTIVE</span>
+          </div>
+
+          <div className="hdr-date">
+            <span>📅</span> {fmtDate(todayStr())}
+          </div>
+
+          <div style={{
+            background: "rgba(255, 255, 255, 0.1)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            padding: "3px 10px",
+            borderRadius: 20,
+            fontSize: 11,
+            fontWeight: 700,
+            color: "#e2e8f0",
+            letterSpacing: "0.5px",
+            textTransform: "uppercase"
+          }}>
+            {authedRole}
+          </div>
+
+          <button
+            className="btn-ghost"
+            style={{
+              borderColor: "rgba(255, 255, 255, 0.2)",
+              color: "#e2e8f0",
+              background: "rgba(255, 255, 255, 0.05)",
+              padding: "5px 12px",
+              fontSize: 11,
+              borderRadius: 8
+            }}
+            onClick={handleLogout}
+          >
+            LOGOUT
+          </button>
         </div>
       </header>
 
       {/* Nav */}
-      <div style={{ position: "sticky", top: 56, zIndex: 99, display: "flex", alignItems: "center", background: "#fff", borderBottom: "2px solid #e2e8f0" }}>
+      <div className="nav-wrapper">
         <button
           type="button"
-          onClick={() => { document.getElementById("main-nav")?.scrollBy({ left: -200, behavior: "smooth" }); }}
-          style={{ background: "transparent", border: "none", padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 18, height: 44, display: "flex", alignItems: "center", flexShrink: 0, fontWeight: "bold" }}
+          className="nav-scroll-btn"
+          onClick={() => { document.getElementById("main-nav")?.scrollBy({ left: -240, behavior: "smooth" }); }}
           title="Scroll tabs left"
         >
           ‹
         </button>
-        <nav id="main-nav" className="nav" style={{ position: "static", borderBottom: "none", flex: 1 }}>
+        <nav id="main-nav" className="nav">
           {TABS.map((t) => (
             <button key={t.id} className={`nav-btn${tab === t.id ? " active" : ""}`} onClick={() => setTab(t.id)}>
               {t.label}
@@ -389,8 +431,8 @@ export default function App() {
         </nav>
         <button
           type="button"
-          onClick={() => { document.getElementById("main-nav")?.scrollBy({ left: 200, behavior: "smooth" }); }}
-          style={{ background: "transparent", border: "none", padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 18, height: 44, display: "flex", alignItems: "center", flexShrink: 0, fontWeight: "bold" }}
+          className="nav-scroll-btn"
+          onClick={() => { document.getElementById("main-nav")?.scrollBy({ left: 240, behavior: "smooth" }); }}
           title="Scroll tabs right"
         >
           ›

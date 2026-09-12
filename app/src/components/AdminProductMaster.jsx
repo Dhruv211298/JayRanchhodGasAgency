@@ -515,7 +515,7 @@ export default function AdminProductMaster({ products: initialProducts = [], onP
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
               <div>
-                <div style={{ fontFamily: "'Fraunces',serif", fontSize: 20, fontWeight: 700 }}>
+                <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 20, fontWeight: 700, color: T.ink }}>
                   {editId ? `✏️ Edit Product (${editId})` : "📦 Add New Product"}
                 </div>
                 <div style={{ fontSize: 12, color: T.inkLight, marginTop: 3 }}>
