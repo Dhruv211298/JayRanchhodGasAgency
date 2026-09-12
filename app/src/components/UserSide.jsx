@@ -9,6 +9,8 @@ import {
   emptyInFor, emptyDespatchedFor, connectionFilledOutFor, connectionEmptyInFor
 } from "../constants";
 
+import SharedSalaryReport from "./SharedSalaryReport";
+
 const VEH_EXP_TYPES = ["Fuel", "Repair", "Maintenance", "Toll / Tax", "Washing", "Other"];
 
 /* Read-only card listing the day's connection-module events. These rows are
@@ -1683,122 +1685,7 @@ export function Summary({ entries, products = PRODUCTS }) {
   );
 }
 
-export function SalaryReport({ entries, employees }) {
-  const [filter, setFilter] = useState(""); // Employee filter
-  const allPayments = entries.flatMap(e => (e.salaryPayments || []).map(p => ({ ...p, date: e.date })));
-
-  // Salary month: if today is 1st-10th, report covers previous month; else current month.
-  const currentMonth = getSalaryMonth();
-
-  const summaries = (employees || []).map(emp => {
-    // Filter by forMonth if present (new records), fall back to entry date for old records
-    const empPayments = allPayments.filter(p => String(p.employeeId) === String(emp.id) &&
-      (p.forMonth ? p.forMonth === currentMonth : p.date.startsWith(currentMonth)));
-    const baseSalary = num(emp.salary || emp.base_salary);
-    const advance = empPayments.filter(p => p.type === "Advance").reduce((s, p) => s + num(p.amt), 0);
-    const salaryPaid = empPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
-    const totalPaid = advance + salaryPaid;
-    const balance = baseSalary - totalPaid;
-    return { ...emp, baseSalary, advance, salaryPaid, totalPaid, balance };
-  });
-
-  const totalOutstanding = summaries.filter(s => s.balance > 0).reduce((s, x) => s + x.balance, 0);
-  const totalOverpaid = summaries.filter(s => s.balance < 0).reduce((s, x) => s + Math.abs(x.balance), 0);
-
-  const filtered = allPayments.filter(p => !filter || String(p.employeeId) === filter).sort((a, b) => b.date.localeCompare(a.date));
-  const selectedEmpSummary = summaries.find(s => String(s.id) === filter);
-
-  return (
-    <div className="fade-in">
-      <div className="stat-row">
-        <div className="stat-card" style={{ "--kpi-color": T.success }}>
-          <div className="stat-val" style={{ color: T.success }}>{inr(totalOutstanding)}</div>
-          <div className="stat-lbl">Total Salary Due (This Month)</div>
-        </div>
-        <div className="stat-card" style={{ "--kpi-color": T.danger }}>
-          <div className="stat-val" style={{ color: T.danger }}>{inr(totalOverpaid)}</div>
-          <div className="stat-lbl">Total Over-Advance</div>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head"><span className="card-head-title">📊 Monthly Balance Sheet ({fmtMonth(currentMonth + "-01")})</span></div>
-        <div style={{ overflowX: "auto" }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th style={{ textAlign: "right" }}>Base Salary</th>
-                <th style={{ textAlign: "right" }}>Advance</th>
-                <th style={{ textAlign: "right" }}>Paid</th>
-                <th style={{ textAlign: "right" }}>Balance</th>
-                <th style={{ textAlign: "center" }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summaries.map(s => (
-                <tr key={s.id} style={{ cursor: "pointer", background: filter === String(s.id) ? "#f0f7ff" : "transparent" }} onClick={() => setFilter(filter === String(s.id) ? "" : String(s.id))}>
-                  <td style={{ fontWeight: 600 }}>{s.name} <div style={{ fontSize: 10, fontWeight: 400, color: T.inkLight }}>{s.role}</div></td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>{inr(s.baseSalary)}</td>
-                  <td style={{ color: T.warn, textAlign: "right" }}>{inr(s.advance)}</td>
-                  <td style={{ color: T.success, textAlign: "right" }}>{inr(s.salaryPaid)}</td>
-                  <td style={{ fontWeight: 700, color: s.balance < 0 ? T.danger : T.success, textAlign: "right" }}>{inr(s.balance)}</td>
-                  <td style={{ textAlign: "center" }}>
-                    {s.balance < 0 ? <span className="badge badge-danger">OVERPAID</span> : s.balance === 0 ? <span className="badge badge-success">SETTLED</span> : <span className="badge badge-warn">DUE</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="card-head"><span className="card-head-title">🔍 Detailed Filter</span></div>
-        <div className="card-body">
-          <select className="inp" value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">— Select Employee to view history —</option>
-            {(employees || []).map(e => <option key={e.id} value={e.id}>{e.name} ({e.role})</option>)}
-          </select>
-        </div>
-      </div>
-
-      {filter && (
-        <div className="card fade-in">
-          <div className="card-head">
-            <span className="card-head-title">📜 Payment History: {selectedEmpSummary?.name}</span>
-            <button className="btn-icon" onClick={() => setFilter("")}>×</button>
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Date Paid</th>
-                  <th style={{ textAlign: "center" }}>Type</th>
-                  <th>For Month</th>
-                  <th style={{ textAlign: "right" }}>Amount</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 && <tr><td colSpan={5} style={{ textAlign: "center", padding: 32, color: T.inkLight }}>No payment records found.</td></tr>}
-                {filtered.map((p, idx) => (
-                  <tr key={idx}>
-                    <td style={{ whiteSpace: "nowrap" }}>{fmtDate(p.date)}</td>
-                    <td style={{ textAlign: "center" }}><span className={`badge ${p.type === "Salary" ? "badge-success" : "badge-warn"}`}>{p.type}</span></td>
-                    <td style={{ fontSize: 12, color: T.inkMid }}>{p.forMonth ? fmtMonth(p.forMonth + "-01") : fmtMonth(p.date)}</td>
-                    <td style={{ color: T.danger, fontWeight: 700, textAlign: "right" }}>{inr(p.amt)}</td>
-                    <td style={{ fontSize: 12, color: T.inkMid }}>{p.notes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+export { default as SalaryReport } from "./SharedSalaryReport";
 
 export function GodownStock({ products, blankStock, api }) {
   const [date, setDate] = useState(todayStr());
