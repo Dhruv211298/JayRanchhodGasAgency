@@ -31,22 +31,13 @@ export function ConnectionsDayCard({ entry, calcs, products = PRODUCTS, onConnec
   };
 
   const handleVoid = async (e) => {
-    const r = await Swal.fire({
-      title: "Void this entry?",
-      html: `Voiding this connection event will remove its stock and cash effects for ${fmtDate(entry.date)}.<br/>Audited action.`,
-      icon: "warning",
-      input: "text",
-      inputPlaceholder: "Reason (optional)",
-      showCancelButton: true,
-      confirmButtonText: "Void Entry",
-      confirmButtonColor: "#ef4444"
-    });
-    if (!r.isConfirmed) return;
+    const ok = window.confirm(`Delete this ${e.eventType || "connection"} entry for ${fmtDate(entry.date)}? This will reverse its stock and cash effects.`);
+    if (!ok) return;
     try {
-      await api.deleteConnectionEvent(e.id, r.value || "");
+      await api.deleteConnectionEvent(e.id, "");
       onConnectionsChanged && onConnectionsChanged();
     } catch (err) {
-      Swal.fire({ title: "Not voided", text: err.message, icon: "error", confirmButtonColor: "#ef4444" });
+      Swal.fire({ title: "Could not delete", text: err.message, icon: "error", confirmButtonColor: "#ef4444" });
     }
   };
 
