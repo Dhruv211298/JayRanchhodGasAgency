@@ -294,23 +294,32 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
         </div>
         <div className="card-body" style={{ padding: 0 }}>
           <div style={{ overflowX: "auto" }}>
-            <table className="tbl">
+            <table className="tbl" style={{ minWidth: 980 }}>
               <thead>
                 <tr>
                   {[
-                    { label: "Cylinder Product", align: "left" },
-                    { label: "Opening Stock", align: "right" },
-                    { label: "Rate (₹)", align: "right" },
-                    { label: "Cash Qty", align: "right" },
-                    { label: "Online Qty", align: "right" },
-                    { label: "SBC", align: "right" },
-                    { label: "DBC", align: "right" },
-                    { label: "Cash Total", align: "right" },
-                    { label: "Online Total", align: "right" },
-                    { label: "Closing", align: "right" },
-                    { label: "⚠️ Shortage / Stolen", align: "right" },
-                    { label: "Remarks", align: "left" }
-                  ].map((xh) => <th key={xh.label} style={{ textAlign: xh.align, ...(xh.label.includes("Shortage") ? { color: "#f59e0b", whiteSpace: "nowrap" } : {}) }}>{xh.label}</th>)}
+                    { label: "Cylinder Product", align: "left", width: 130 },
+                    { label: "Opening Stock", align: "right", width: 80 },
+                    { label: "Rate (₹)", align: "right", width: 85 },
+                    { label: "Cash Qty", align: "right", width: 75 },
+                    { label: "Online Qty", align: "right", width: 75 },
+                    { label: "SBC", align: "right", width: 65 },
+                    { label: "DBC", align: "right", width: 65 },
+                    { label: "Cash Total", align: "right", width: 105 },
+                    { label: "Online Total", align: "right", width: 105 },
+                    { label: "Closing", align: "right", width: 75 },
+                    { label: "⚠️ Shortage / Stolen", align: "right", width: 90 },
+                    { label: "Remarks", align: "left", width: 130 }
+                  ].map((xh) => (
+                    <th key={xh.label} style={{
+                      textAlign: xh.align,
+                      minWidth: xh.width,
+                      width: xh.width,
+                      ...(xh.label.includes("Shortage") ? { color: "#f59e0b", whiteSpace: "nowrap" } : {})
+                    }}>
+                      {xh.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -330,15 +339,15 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                   return (
                     <tr key={p.id}>
                       <td style={{ fontWeight: 600, color: T.accent, whiteSpace: "nowrap" }}>{productLabel(p.id, products)}</td>
-                      <td><input className="inp-inline" type="number" value={autoOpening} readOnly style={{ background: "rgba(0,119,255,0.05)", color: T.blue, fontWeight: 600 }} /></td>
-                      <td><input className="inp-inline" type="number" value={p.rate} readOnly /></td>
-                      <td><input className="inp-inline" type="number" value={p.sell} onChange={(e) => setProduct(p.id, "sell", e.target.value)} readOnly={!canEdit} /></td>
-                      <td><input className="inp-inline" type="number" value={p.online} onChange={(e) => setProduct(p.id, "online", e.target.value)} readOnly={!canEdit} /></td>
-                      <td><input className="inp-inline" type="number" value={p.sbc} onChange={(e) => setProduct(p.id, "sbc", e.target.value)} readOnly={!canEdit} /></td>
-                      <td><input className="inp-inline" type="number" value={p.dbc} onChange={(e) => setProduct(p.id, "dbc", e.target.value)} readOnly={!canEdit} /></td>
-                      <td style={{ color: T.success, fontWeight: 700, textAlign: "right" }} title={`Refill (Cash): ${inr(num(p.sell) * num(p.rate))} | SBC: ${inr(num(p.sbc) * num(p.sbcRate))} | DBC: ${inr(num(p.dbc) * num(p.dbcRate))}`}>{inr(cashTotal)}</td>
-                      <td style={{ color: T.blue, fontWeight: 700, textAlign: "right" }}>{inr(onlineTotal)}</td>
-                      <td style={{ color: closing < 0 ? T.danger : T.ink, fontWeight: 600, textAlign: "right" }}>{closing}<ConnectionStockNote entry={entry} productId={p.id} /></td>
+                      <td><input className="inp-inline" type="number" value={autoOpening} readOnly style={{ background: "rgba(0,119,255,0.05)", color: T.blue, fontWeight: 600, minWidth: 60 }} /></td>
+                      <td><input className="inp-inline" type="number" value={p.rate} readOnly style={{ minWidth: 65, fontWeight: 600 }} /></td>
+                      <td><input className="inp-inline" type="number" value={p.sell} onChange={(e) => setProduct(p.id, "sell", e.target.value)} readOnly={!canEdit} style={{ minWidth: 55 }} /></td>
+                      <td><input className="inp-inline" type="number" value={p.online} onChange={(e) => setProduct(p.id, "online", e.target.value)} readOnly={!canEdit} style={{ minWidth: 55 }} /></td>
+                      <td><input className="inp-inline" type="number" value={p.sbc} onChange={(e) => setProduct(p.id, "sbc", e.target.value)} readOnly={!canEdit} style={{ minWidth: 50 }} /></td>
+                      <td><input className="inp-inline" type="number" value={p.dbc} onChange={(e) => setProduct(p.id, "dbc", e.target.value)} readOnly={!canEdit} style={{ minWidth: 50 }} /></td>
+                      <td style={{ color: T.success, fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }} title={`Refill (Cash): ${inr(num(p.sell) * num(p.rate))} | SBC: ${inr(num(p.sbc) * num(p.sbcRate))} | DBC: ${inr(num(p.dbc) * num(p.dbcRate))}`}>{inr(cashTotal)}</td>
+                      <td style={{ color: T.blue, fontWeight: 700, textAlign: "right", whiteSpace: "nowrap" }}>{inr(onlineTotal)}</td>
+                      <td style={{ color: closing < 0 ? T.danger : T.ink, fontWeight: 600, textAlign: "right", whiteSpace: "nowrap" }}>{closing}<ConnectionStockNote entry={entry} productId={p.id} /></td>
                       <td style={{ textAlign: "right" }}>
                         <input
                           className="inp-inline"
@@ -350,6 +359,7 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                           title="Shortage / Stolen — reminder only, does not affect stock"
                           style={{
                             textAlign: "right",
+                            minWidth: 55,
                             border: num(p.shortage) > 0 ? "1.5px solid #f59e0b" : undefined,
                             background: num(p.shortage) > 0 ? "rgba(245,158,11,0.08)" : undefined,
                             color: num(p.shortage) > 0 ? "#d97706" : undefined,
@@ -1583,11 +1593,12 @@ export function SalaryReport({ entries, employees }) {
     // Filter by forMonth if present (new records), fall back to entry date for old records
     const empPayments = allPayments.filter(p => String(p.employeeId) === String(emp.id) &&
       (p.forMonth ? p.forMonth === currentMonth : p.date.startsWith(currentMonth)));
+    const baseSalary = num(emp.salary || emp.base_salary);
     const advance = empPayments.filter(p => p.type === "Advance").reduce((s, p) => s + num(p.amt), 0);
-    const salary = empPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
-    const totalPaid = advance + salary;
-    const balance = num(emp.salary) - totalPaid;
-    return { ...emp, advance, salary, totalPaid, balance };
+    const salaryPaid = empPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
+    const totalPaid = advance + salaryPaid;
+    const balance = baseSalary - totalPaid;
+    return { ...emp, baseSalary, advance, salaryPaid, totalPaid, balance };
   });
 
   const totalOutstanding = summaries.filter(s => s.balance > 0).reduce((s, x) => s + x.balance, 0);
@@ -1627,9 +1638,9 @@ export function SalaryReport({ entries, employees }) {
               {summaries.map(s => (
                 <tr key={s.id} style={{ cursor: "pointer", background: filter === String(s.id) ? "#f0f7ff" : "transparent" }} onClick={() => setFilter(filter === String(s.id) ? "" : String(s.id))}>
                   <td style={{ fontWeight: 600 }}>{s.name} <div style={{ fontSize: 10, fontWeight: 400, color: T.inkLight }}>{s.role}</div></td>
-                  <td style={{ textAlign: "right" }}>{inr(s.salary)}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600 }}>{inr(s.baseSalary)}</td>
                   <td style={{ color: T.warn, textAlign: "right" }}>{inr(s.advance)}</td>
-                  <td style={{ color: T.success, textAlign: "right" }}>{inr(s.salary)}</td>
+                  <td style={{ color: T.success, textAlign: "right" }}>{inr(s.salaryPaid)}</td>
                   <td style={{ fontWeight: 700, color: s.balance < 0 ? T.danger : T.success, textAlign: "right" }}>{inr(s.balance)}</td>
                   <td style={{ textAlign: "center" }}>
                     {s.balance < 0 ? <span className="badge badge-danger">OVERPAID</span> : s.balance === 0 ? <span className="badge badge-success">SETTLED</span> : <span className="badge badge-warn">DUE</span>}

@@ -371,13 +371,31 @@ export default function App() {
       </header>
 
       {/* Nav */}
-      <nav className="nav">
-        {TABS.map((t) => (
-          <button key={t.id} className={`nav-btn${tab === t.id ? " active" : ""}`} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <div style={{ position: "sticky", top: 56, zIndex: 99, display: "flex", alignItems: "center", background: "#fff", borderBottom: "2px solid #e2e8f0" }}>
+        <button
+          type="button"
+          onClick={() => { document.getElementById("main-nav")?.scrollBy({ left: -200, behavior: "smooth" }); }}
+          style={{ background: "transparent", border: "none", padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 18, height: 44, display: "flex", alignItems: "center", flexShrink: 0, fontWeight: "bold" }}
+          title="Scroll tabs left"
+        >
+          ‹
+        </button>
+        <nav id="main-nav" className="nav" style={{ position: "static", borderBottom: "none", flex: 1 }}>
+          {TABS.map((t) => (
+            <button key={t.id} className={`nav-btn${tab === t.id ? " active" : ""}`} onClick={() => setTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <button
+          type="button"
+          onClick={() => { document.getElementById("main-nav")?.scrollBy({ left: 200, behavior: "smooth" }); }}
+          style={{ background: "transparent", border: "none", padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 18, height: 44, display: "flex", alignItems: "center", flexShrink: 0, fontWeight: "bold" }}
+          title="Scroll tabs right"
+        >
+          ›
+        </button>
+      </div>
 
       <main className="main">
         {/* User Tabs */}

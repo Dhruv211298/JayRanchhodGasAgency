@@ -39,9 +39,12 @@ body { background: ${T.bg}; font-family: 'DM Sans', sans-serif; color: ${T.ink};
 .hdr-date { font-size: 11px; color: ${T.inkLight}; letter-spacing: 1px; }
 
 /* ── Nav ── */
-.nav { background: ${T.card}; border-bottom: 2px solid ${T.border}; display: flex; overflow-x: auto; scrollbar-width: none; position: sticky; top: 56px; z-index: 99; }
-.nav::-webkit-scrollbar { display: none; }
-.nav-btn { flex-shrink: 0; padding: 0 18px; height: 44px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; border: none; border-bottom: 2.5px solid transparent; background: transparent; color: ${T.inkLight}; cursor: pointer; transition: all .18s; white-space: nowrap; }
+.nav { background: ${T.card}; border-bottom: 2px solid ${T.border}; display: flex; overflow-x: auto; position: sticky; top: 56px; z-index: 99; scrollbar-width: thin; scrollbar-color: rgba(224, 77, 1, 0.4) transparent; }
+.nav::-webkit-scrollbar { height: 4px; }
+.nav::-webkit-scrollbar-track { background: transparent; }
+.nav::-webkit-scrollbar-thumb { background: rgba(224, 77, 1, 0.3); border-radius: 4px; }
+.nav::-webkit-scrollbar-thumb:hover { background: ${T.accent}; }
+.nav-btn { flex-shrink: 0; padding: 0 16px; height: 44px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; border: none; border-bottom: 2.5px solid transparent; background: transparent; color: ${T.inkLight}; cursor: pointer; transition: all .18s; white-space: nowrap; }
 .nav-btn.active { color: ${T.accent}; border-bottom-color: ${T.accent}; }
 .nav-btn:hover:not(.active) { color: ${T.ink}; background: ${T.cardAlt}; }
 
@@ -83,9 +86,20 @@ body { background: ${T.bg}; font-family: 'DM Sans', sans-serif; color: ${T.ink};
 .field label { display: block; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: ${T.inkLight}; margin-bottom: 4px; }
 .inp { width: 100%; background: ${T.cardAlt}; border: 1.5px solid ${T.border}; border-radius: 6px; padding: 8px 10px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: ${T.ink}; outline: none; transition: border-color .15s; }
 .inp:focus { border-color: ${T.accent}; }
-.inp-inline { width: 100%; background: transparent; border: none; border-bottom: 1.5px solid ${T.border}; padding: 4px 6px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: ${T.ink}; outline: none; transition: border-color .15s; text-align: center !important; }
+
+/* Number inputs: disable disruptive native spinners so values and rates never truncate */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.inp-inline { width: 100%; min-width: 50px; background: transparent; border: none; border-bottom: 1.5px solid ${T.border}; padding: 3px 4px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: ${T.ink}; outline: none; transition: border-color .15s; text-align: center !important; }
 .inp-inline:focus { border-bottom-color: ${T.accent}; }
-.inp-inline.left { text-align: left; }
+.inp-inline.left { text-align: left !important; }
 
 /* ── Tables ── */
 .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }

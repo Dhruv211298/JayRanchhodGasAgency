@@ -475,7 +475,7 @@ export function AdminPriceHistory({ prices, setPrices, products = PRODUCTS }) {
   };
 
   const filtered = prices.filter(p => p.productId === selProd).sort((a,b) => b.date.localeCompare(a.date));
-  const allProds = [...(products || PRODUCTS), ...ACCESSORIES];
+  const allProds = Array.from(new Map([...(products || PRODUCTS), ...ACCESSORIES].map(p => [p.id, p])).values());
 
   return (
     <div className="fade-in">
@@ -564,7 +564,7 @@ export function AdminCommission({ commissions, setCommissions, products = PRODUC
     await syncOrExplain(commissions.filter(c=>c.id!==id));
   };
   const filtered = commissions.filter(c=>c.productId===selProd).sort((a,b)=>b.date.localeCompare(a.date));
-  const prods = products || PRODUCTS;
+  const prods = (products || PRODUCTS).filter(p => (p.category || "").toLowerCase() !== "accessory");
 
   return (
     <div className="fade-in">
@@ -800,11 +800,12 @@ export function AdminSalaryReport({ entries, employees }) {
     // Filter by forMonth if present (new records), fall back to entry date for old records
     const empPayments = allPayments.filter(p => String(p.employeeId) === String(emp.id) &&
       (p.forMonth ? p.forMonth === currentMonth : p.date.startsWith(currentMonth)));
+    const baseSalary = num(emp.salary || emp.base_salary);
     const advance = empPayments.filter(p => p.type === "Advance").reduce((s, p) => s + num(p.amt), 0);
-    const salary = empPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
-    const totalPaid = advance + salary;
-    const balance = num(emp.salary) - totalPaid;
-    return { ...emp, advance, salary, totalPaid, balance };
+    const salaryPaid = empPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
+    const totalPaid = advance + salaryPaid;
+    const balance = baseSalary - totalPaid;
+    return { ...emp, baseSalary, advance, salaryPaid, totalPaid, balance };
   });
 
   const totalOutstanding = summaries.filter(s => s.balance > 0).reduce((s, x) => s + x.balance, 0);
@@ -844,9 +845,9 @@ export function AdminSalaryReport({ entries, employees }) {
               {summaries.map(s => (
                 <tr key={s.id} style={{ cursor: "pointer", background: filter === String(s.id) ? "#f0f7ff" : "transparent" }} onClick={() => setFilter(filter === String(s.id) ? "" : String(s.id))}>
                   <td style={{ fontWeight: 600 }}>{s.name} <div style={{ fontSize: 10, fontWeight: 400, color: T.inkLight }}>{s.role}</div></td>
-                  <td style={{ textAlign: "right" }}>{inr(s.salary)}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600 }}>{inr(s.baseSalary)}</td>
                   <td style={{ color: T.warn, textAlign: "right" }}>{inr(s.advance)}</td>
-                  <td style={{ color: T.success, textAlign: "right" }}>{inr(s.salary)}</td>
+                  <td style={{ color: T.success, textAlign: "right" }}>{inr(s.salaryPaid)}</td>
                   <td style={{ fontWeight: 700, color: s.balance < 0 ? T.danger : T.success, textAlign: "right" }}>{inr(s.balance)}</td>
                   <td style={{ textAlign: "center" }}>
                     {s.balance < 0 ? <span className="badge badge-danger">OVERPAID</span> : s.balance === 0 ? <span className="badge badge-success">SETTLED</span> : <span className="badge badge-warn">DUE</span>}

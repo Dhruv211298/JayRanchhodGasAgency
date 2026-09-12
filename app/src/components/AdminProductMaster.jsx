@@ -373,21 +373,21 @@ export default function AdminProductMaster({ products: initialProducts = [], onP
           <div style={{ padding: 40, textAlign: "center", color: T.inkLight }}>Loading products…</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table className="tbl">
+            <table className="tbl" style={{ minWidth: 980 }}>
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Product ID</th>
-                  <th>Category</th>
-                  <th>Full Name / Description</th>
-                  <th>Short Name</th>
-                  <th>SKU</th>
-                  <th style={{ textAlign: "right" }}>Base Rate (₹)</th>
-                  <th style={{ textAlign: "right" }}>SBC Rate (₹)</th>
-                  <th style={{ textAlign: "right" }}>DBC Rate (₹)</th>
-                  <th style={{ textAlign: "center" }}>Order</th>
-                  <th style={{ textAlign: "center" }}>Status</th>
-                  <th style={{ textAlign: "center" }}>Actions</th>
+                  <th style={{ width: 40 }}>#</th>
+                  <th style={{ minWidth: 90 }}>Product ID</th>
+                  <th style={{ minWidth: 100 }}>Category</th>
+                  <th style={{ minWidth: 150 }}>Full Name / Description</th>
+                  <th style={{ minWidth: 80 }}>Short Name</th>
+                  <th style={{ minWidth: 80 }}>SKU</th>
+                  <th style={{ textAlign: "right", minWidth: 95 }}>Base Rate (₹)</th>
+                  <th style={{ textAlign: "right", minWidth: 95 }}>SBC Rate (₹)</th>
+                  <th style={{ textAlign: "right", minWidth: 95 }}>DBC Rate (₹)</th>
+                  <th style={{ textAlign: "center", width: 50 }}>Order</th>
+                  <th style={{ textAlign: "center", width: 80 }}>Status</th>
+                  <th style={{ textAlign: "center", minWidth: 100 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
