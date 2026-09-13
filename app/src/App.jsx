@@ -477,6 +477,9 @@ export default function App() {
             }}
           />
         )}
+        {tab === "admin-prices" && <AdminPriceHistory prices={prices} setPrices={setPrices} products={products} />}
+        {tab === "admin-comm" && <AdminCommission commissions={commissions} setCommissions={setCommissions} products={products} />}
+        {tab === "admin-products" && <AdminProductMaster products={products} onProductsChanged={() => loadData(entry.date)} />}
         {tab === "admin-credits" && <AdminCreditOverview pending={pending} products={products} />}
         {tab === "admin-users" && <AdminUsers />}
         {tab === "admin-vehicles" && <AdminVehicleMaster />}
