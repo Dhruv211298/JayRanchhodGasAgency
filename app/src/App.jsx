@@ -16,6 +16,7 @@ import {
   AdminProductMaster
 } from "./components/AdminSide";
 import ConnectionsTab from "./components/ConnectionsTab";
+import AllReportsTab from "./components/AllReportsTab";
 
 /* Pure helpers — kept outside the component so loadData's useCallback has
    no hidden dependencies. */
@@ -314,23 +315,19 @@ export default function App() {
     { id: "entry", label: "📋 Daily Entry" },
     { id: "history", label: "📅 History" },
     { id: "credits", label: "💳 Pending Credits" },
-    { id: "connections", label: "🔗 Connections" },
-    { id: "summary", label: "📊 Summary" },
-    { id: "salary", label: "👤 Salary Report" },
+    { id: "reports", label: "📊 All Reports" },
   ];
 
   const TABS_ADMIN = [
     { id: "admin-entry", label: "📋 Daily Entry" },
     { id: "admin-history", label: "📅 History" },
     { id: "admin-dashboard", label: "⬛ Dashboard" },
-    { id: "admin-connections", label: "🔗 Connections" },
+    { id: "admin-reports", label: "📊 All Reports" },
     { id: "admin-prices", label: "📈 Prices" },
     { id: "admin-comm", label: "💰 Commission" },
     { id: "admin-products", label: "📦 Product Master" },
     { id: "admin-vehicles", label: "🚛 Vehicle Master" },
     { id: "admin-employees", label: "👤 Employee Master" },
-    { id: "admin-reports", label: "📊 Day Reports" },
-    { id: "admin-salary", label: "👤 Salary Report" },
     { id: "admin-credits", label: "💳 Ledger" },
     { id: "admin-users", label: "👥 Users" },
   ];
@@ -444,20 +441,34 @@ export default function App() {
         {tab === "entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} products={products} onConnectionsChanged={onConnectionsChanged} isAdmin={false} />}
         {tab === "history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("entry"); }} products={products} />}
         {tab === "credits" && <PendingCredits pending={pending} onRecord={recordPayment} products={products} />}
-        {tab === "connections" && <ConnectionsTab isAdmin={false} onChanged={onConnectionsChanged} prices={prices} />}
-        {tab === "summary" && <Summary entries={entries} products={products} />}
-        {tab === "salary" && <SalaryReport entries={entries} employees={employees} />}
+        {(tab === "reports" || tab === "connections" || tab === "summary" || tab === "salary") && (
+          <AllReportsTab
+            isAdmin={false}
+            initialSub={tab === "summary" ? "summary" : tab === "salary" ? "salary" : "conn-register"}
+            entries={entries}
+            employees={employees}
+            products={products}
+            onChanged={onConnectionsChanged}
+            prices={prices}
+          />
+        )}
 
         {/* Admin Tabs */}
         {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} onConnectionsChanged={onConnectionsChanged} />}
         {tab === "admin-history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("admin-entry"); }} isAdmin={true} onDelete={handleDeleteEntry} products={products} />}
         {tab === "admin-dashboard" && <AdminDashboard entries={entries} pending={pending} prices={prices} commissions={commissions} products={products} onViewDay={(e) => { setEntry(e); setTab("admin-entry"); }} />}
-        {tab === "admin-connections" && <ConnectionsTab isAdmin={true} onChanged={onConnectionsChanged} prices={prices} />}
-        {tab === "admin-prices" && <AdminPriceHistory prices={prices} setPrices={setPrices} products={products} />}
-        {tab === "admin-comm" && <AdminCommission commissions={commissions} setCommissions={setCommissions} products={products} />}
-        {tab === "admin-products" && <AdminProductMaster products={products} onProductsChanged={() => loadData(entry.date)} />}
-        {tab === "admin-reports" && <AdminDayReports entries={entries} commissions={commissions} products={products} />}
-        {tab === "admin-salary" && <AdminSalaryReport entries={entries} employees={employees} />}
+        {(tab === "admin-reports" || tab === "admin-connections" || tab === "admin-salary" || tab === "admin-all-reports") && (
+          <AllReportsTab
+            isAdmin={true}
+            initialSub={tab === "admin-connections" ? "conn-register" : tab === "admin-salary" ? "salary" : "day-reports"}
+            entries={entries}
+            commissions={commissions}
+            employees={employees}
+            products={products}
+            onChanged={onConnectionsChanged}
+            prices={prices}
+          />
+        )}
         {tab === "admin-credits" && <AdminCreditOverview pending={pending} products={products} />}
         {tab === "admin-users" && <AdminUsers />}
         {tab === "admin-vehicles" && <AdminVehicleMaster />}

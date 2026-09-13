@@ -719,3 +719,6 @@ export default function ConnectionsTab({ isAdmin, onChanged }) {
     </div>
   );
 }
+
+export { Register, SummaryReport, MonthlyReport, PaymentsReport, RefundsReport, AuditTrail };
+
