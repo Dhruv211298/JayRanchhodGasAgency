@@ -1834,8 +1834,9 @@ export function Summary({ entries, products = PRODUCTS }) {
     acc.connCash += c.totalConnectionPaymentsCash;
     acc.connOnline += c.totalConnectionPaymentsOnline;
     acc.connRefunds += c.totalConnectionRefunds;
+    acc.bob += num(e.bob);
     return acc;
-  }, { sales: 0, expenses: 0, credit: 0, cheque: 0, delivery: 0, salary: 0, connCash: 0, connOnline: 0, connRefunds: 0 });
+  }, { sales: 0, expenses: 0, credit: 0, cheque: 0, delivery: 0, salary: 0, connCash: 0, connOnline: 0, connRefunds: 0, bob: 0 });
   const productTotals = (products || PRODUCTS).map((p) => {
     const findProd = (e) => (e.products || []).find(x => x.id === p.id) || {};
     const cashQty = filtered.reduce((s, e) => s + num(findProd(e).sell), 0);
@@ -1891,6 +1892,7 @@ export function Summary({ entries, products = PRODUCTS }) {
         <div className="stat-card" style={{ "--kpi-color": T.danger }}><div className="stat-val" style={{ color: T.danger }}>{inr(totals.salary)}</div><div className="stat-lbl">Salary/Advance</div></div>
         <div className="stat-card" style={{ "--kpi-color": T.success }}><div className="stat-val" style={{ color: T.success }}>{inr(totals.connCash)}</div><div className="stat-lbl">Connection Payments (Cash)</div>{totals.connOnline > 0 && <div className="stat-delta" style={{ color: T.blue }}>+ {inr(totals.connOnline)} online</div>}</div>
         <div className="stat-card" style={{ "--kpi-color": T.danger }}><div className="stat-val" style={{ color: T.danger }}>{inr(totals.connRefunds)}</div><div className="stat-lbl">Connection Refunds</div></div>
+        <div className="stat-card" style={{ "--kpi-color": "#2563eb" }}><div className="stat-val" style={{ color: "#2563eb" }}>{inr(totals.bob)}</div><div className="stat-lbl">BOB Bank Deposit</div></div>
       </div>
       <div className="g2">
         <div className="card">

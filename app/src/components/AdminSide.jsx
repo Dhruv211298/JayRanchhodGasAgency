@@ -150,6 +150,9 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
   // Outstanding credit (all-time pending)
   const outstanding = (pending || []).filter(p => !p.cleared).reduce((s, p) => s + (num(p.originalAmt) - num(p.recovered)), 0);
 
+  // BOB Bank Deposits in range
+  const mBobDeposit = rangeEntries.reduce((s, e) => s + num(e.bob), 0);
+
   // Connections in range
   const mConn = rangeEntries.reduce((acc, e) => {
     const c = calcEntry(e);
@@ -361,6 +364,13 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
           <div className="stat-lbl">Outstanding Credit</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>Total Pending All-Time</div>
         </div>
+
+        {/* BOB Bank Deposit */}
+        <div className="stat-card" style={{ "--kpi-color": "#2563eb" }}>
+          <div className="stat-val" style={{ color: "#2563eb" }}>{inr(mBobDeposit)}</div>
+          <div className="stat-lbl">BOB Bank Deposit</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>Bank of Baroda Deposits</div>
+        </div>
       </div>
 
       {/* Grid: P&L Financial Summary + Product Snapshot */}
@@ -487,6 +497,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
                 <th style={{ textAlign: "right" }}>Expenses</th>
                 <th style={{ textAlign: "right" }}>Commission</th>
                 <th style={{ textAlign: "right" }}>Real Profit</th>
+                <th style={{ textAlign: "right", color: "#1d4ed8" }}>BOB Deposit</th>
                 <th style={{ textAlign: "right" }}>Cash on Hand</th>
                 {onViewDay && <th style={{ textAlign: "center" }}>Action</th>}
               </tr>
@@ -494,7 +505,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
             <tbody>
               {rangeEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={onViewDay ? 9 : 8} style={{ textAlign: "center", padding: "24px 12px", color: T.inkLight }}>
+                  <td colSpan={onViewDay ? 10 : 9} style={{ textAlign: "center", padding: "24px 12px", color: T.inkLight }}>
                     No daily entries recorded between {fmtDate(fromDate)} and {fmtDate(toDate)}.
                   </td>
                 </tr>
@@ -515,6 +526,9 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
                       <td style={{ color: T.accent, fontWeight: 600, textAlign: "right" }}>{inr(dayComm)}</td>
                       <td style={{ color: dayProfit >= 0 ? T.success : T.danger, fontWeight: 700, textAlign: "right" }}>
                         {dayProfit >= 0 ? "+" : "−"}{inr(Math.abs(dayProfit))}
+                      </td>
+                      <td style={{ color: num(e.bob) > 0 ? "#1d4ed8" : T.inkLight, fontWeight: num(e.bob) > 0 ? 700 : 400, textAlign: "right" }}>
+                        {num(e.bob) > 0 ? inr(num(e.bob)) : "—"}
                       </td>
                       <td style={{ color: c.cashOnHand < 0 ? T.danger : T.ink, fontWeight: 700, textAlign: "right" }}>{inr(c.cashOnHand)}</td>
                       {onViewDay && (
@@ -818,12 +832,17 @@ export function AdminDayReports({ entries, commissions, products = PRODUCTS, onN
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           {entry ? (
             <>
               <span className="badge badge-success" style={{ fontSize: 12, padding: "5px 10px" }}>
                 ● Saved Entry Found
               </span>
+              {num(entry.bob) > 0 && (
+                <span className="badge" style={{ background: "rgba(37,99,235,0.08)", color: "#1d4ed8", border: "1px solid rgba(37,99,235,0.25)", fontSize: 12, padding: "5px 10px", fontWeight: 700 }}>
+                  🏦 BOB Deposit: {inr(num(entry.bob))}
+                </span>
+              )}
               {onNavigate && (
                 <button
                   type="button"
@@ -901,6 +920,11 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
     <div>
       <div className="stat-row">
         <div className="stat-card" style={{ "--kpi-color": T.success }}><div className="stat-val" style={{color:T.success}}>{inr(calcs.totalSales)}</div><div className="stat-lbl">Total Sales</div></div>
+        <div className="stat-card" style={{ "--kpi-color": "#2563eb" }}>
+          <div className="stat-val" style={{ color: num(entry.bob) > 0 ? "#2563eb" : T.inkMid }}>{inr(num(entry.bob))}</div>
+          <div className="stat-lbl">BOB Bank Deposit</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>Bank of Baroda Deposit</div>
+        </div>
         <div className="stat-card" style={{ "--kpi-color": calcs.cashOnHand<0?T.danger:T.ink }}><div className="stat-val" style={{color:calcs.cashOnHand<0?T.danger:T.ink}}>{inr(calcs.cashOnHand)}</div><div className="stat-lbl">Cash on Hand</div></div>
         <div className="stat-card" style={{ "--kpi-color": T.blue }}><div className="stat-val" style={{color:T.blue}}>{totalCyl}</div><div className="stat-lbl">Cylinders Sold</div></div>
         <div className="stat-card" style={{ "--kpi-color": T.accent }}><div className="stat-val" style={{color:T.accent}}>{inr(totalComm)}</div><div className="stat-lbl">Commission Earned</div></div>
@@ -966,6 +990,14 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Vehicle Expenses</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalVehicleExp)}</span></div>
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Salary / Advance</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalSalaryPayments)}</span></div>
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Cheque/Online</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalCheque)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee", background: num(entry.bob) > 0 ? "rgba(37,99,235,0.04)" : "transparent"}}>
+              <span style={{fontSize:12,color:num(entry.bob) > 0 ? "#1d4ed8" : T.inkMid, fontWeight: num(entry.bob) > 0 ? 700 : 400}}>
+                🏦 BOB Bank Deposit (−)
+              </span>
+              <span style={{fontWeight:700,color:num(entry.bob) > 0 ? T.danger : T.inkLight}}>
+                −{inr(num(entry.bob))}
+              </span>
+            </div>
             <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",marginTop:8,borderTop:"2px solid #e2e8f0"}}><span style={{fontSize:12,fontWeight:700,color:T.inkMid}}>CASH ON HAND</span><span style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:700,color:calcs.cashOnHand<0?T.danger:T.success}}>{inr(calcs.cashOnHand)}</span></div>
           </div>
         </div>
@@ -1036,6 +1068,22 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
               </table>
             </div>
           </div>
+
+          {num(entry.bob) > 0 && (
+            <div className="card" style={{ borderLeft: "4px solid #2563eb", background: "rgba(37,99,235,0.02)" }}>
+              <div className="card-head">
+                <span className="card-head-title" style={{ color: "#1d4ed8" }}>🏦 Bank of Baroda (BOB) Deposit</span>
+                <span style={{ fontWeight: 800, color: "#1d4ed8", fontSize: 16 }}>{inr(num(entry.bob))}</span>
+              </div>
+              <div className="card-body" style={{ padding: "10px 16px", fontSize: 12, color: T.inkMid }}>
+                <span>Amount deposited to BOB Bank account on {fmtDate(entry.date)}: </span>
+                <strong style={{ color: T.ink }}>{inr(num(entry.bob))}</strong>
+                <div style={{ fontSize: 11, color: T.inkLight, marginTop: 4 }}>
+                  Deducted from cash-on-hand closing drawer balance.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
