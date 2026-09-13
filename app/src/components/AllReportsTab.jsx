@@ -213,27 +213,27 @@ export default function AllReportsTab({
       )}
 
       {sub === "conn-register" && (
-        <ConnectionRegister isAdmin={isAdmin} refreshKey={refreshKey} onChanged={changed} />
+        <ConnectionRegister isAdmin={isAdmin} refreshKey={refreshKey} onChanged={changed} products={products} />
       )}
 
       {isAdmin && sub === "conn-summary" && (
-        <ConnectionSummaryReport />
+        <ConnectionSummaryReport products={products} />
       )}
 
       {isAdmin && sub === "conn-monthly" && (
-        <ConnectionMonthlyReport />
+        <ConnectionMonthlyReport products={products} />
       )}
 
       {isAdmin && sub === "conn-payments" && (
-        <ConnectionPaymentsReport />
+        <ConnectionPaymentsReport products={products} />
       )}
 
       {isAdmin && sub === "conn-refunds" && (
-        <ConnectionRefundsReport />
+        <ConnectionRefundsReport products={products} />
       )}
 
       {isAdmin && sub === "conn-audit" && (
-        <ConnectionAuditTrail />
+        <ConnectionAuditTrail products={products} />
       )}
     </div>
   );

@@ -2,6 +2,7 @@ export const PRODUCTS = [
   { id: "p14", label: "14 KG  (5350–5370)", short: "14 KG", sku: "5350–5370", fallbackRate: 906.5, fallbackSbc: 0, fallbackDbc: 0 },
   { id: "p19", label: "19 KG  (5400)", short: "19 KG", sku: "5400", fallbackRate: 1950, fallbackSbc: 0, fallbackDbc: 0 },
   { id: "p5", label: "FLT 5 KG", short: "5 KG", sku: "FLT", fallbackRate: 564.5, fallbackSbc: 0, fallbackDbc: 0 },
+  { id: "p10", label: "10 KG Cylinder", short: "10 KG", sku: "10KG", fallbackRate: 1668, fallbackSbc: 0, fallbackDbc: 0 },
 ];
 export const ACCESSORIES = [
   { id: "pipe", label: "Gas Pipe", short: "Pipe", fallbackRate: 150 },
@@ -466,5 +467,10 @@ export const downloadCsv = (filename, headers, rows) => {
 export const productLabel = (pid, productList = PRODUCTS) => {
   const list = (productList && productList.length > 0) ? productList : PRODUCTS;
   const match = list.find(p => p.id === pid) || PRODUCTS.find(p => p.id === pid);
-  return match?.short || match?.label || pid;
+  if (match) return match.short || match.label || pid;
+  if (pid === "p10") return "10 KG";
+  if (pid === "p14") return "14 KG";
+  if (pid === "p19") return "19 KG";
+  if (pid === "p5") return "5 KG";
+  return pid;
 };

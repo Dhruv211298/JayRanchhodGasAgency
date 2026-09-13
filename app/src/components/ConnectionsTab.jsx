@@ -370,7 +370,7 @@ export function SurrenderForm({ isAdmin, onDone, defaultDate, lockDate = false, 
 }
 
 /* ══════════════ Daily register (all roles) ══════════════ */
-function EventsTable({ events, isAdmin, onVoid }) {
+function EventsTable({ events, isAdmin, onVoid, products }) {
   return (
     <div className="card">
       <div style={{ overflowX: "auto" }}>
@@ -384,7 +384,7 @@ function EventsTable({ events, isAdmin, onVoid }) {
                 <tr key={e.id}>
                   <td style={{ whiteSpace: "nowrap" }}>{fmtDate(e.date)}</td>
                   <td><span className={`badge ${TYPE_BADGE[e.eventType]}`}>{TYPE_LABEL[e.eventType]}</span></td>
-                  <td style={{ fontWeight: 600 }}>{productLabel(e.productId)}{e.connectionType ? <div style={{ fontSize: 10, color: T.inkLight }}>{e.connectionType}</div> : null}</td>
+                  <td style={{ fontWeight: 600 }}>{productLabel(e.productId, products)}{e.connectionType ? <div style={{ fontSize: 10, color: T.inkLight }}>{e.connectionType}</div> : null}</td>
                   <td style={{ textAlign: "right" }}>{e.qty}</td>
                   <td style={{ fontSize: 12, whiteSpace: "nowrap" }}>
                     {e.cylindersOut > 0 && <span style={{ color: T.danger }}>−{e.cylindersOut} filled</span>}
@@ -439,7 +439,7 @@ function RangeBar({ from, to, setFrom, setTo, onExport, count, extra }) {
   );
 }
 
-function Register({ isAdmin, refreshKey, onChanged }) {
+function Register({ isAdmin, refreshKey, onChanged, products }) {
   const [from, setFrom] = useState(todayStr());
   const [to, setTo] = useState(todayStr());
   const [type, setType] = useState("");
@@ -454,7 +454,7 @@ function Register({ isAdmin, refreshKey, onChanged }) {
   const voidEvent = async (e) => {
     const r = await Swal.fire({
       title: "Void this entry?",
-      html: `<strong>${TYPE_LABEL[e.eventType]}</strong> · ${productLabel(e.productId)} × ${e.qty} on ${fmtDate(e.date)}<br/>Its stock and cash effects will be removed for that day. The action is recorded in the audit trail.`,
+      html: `<strong>${TYPE_LABEL[e.eventType]}</strong> · ${productLabel(e.productId, products)} × ${e.qty} on ${fmtDate(e.date)}<br/>Its stock and cash effects will be removed for that day. The action is recorded in the audit trail.`,
       icon: "warning", input: "text", inputPlaceholder: "Reason (optional)", showCancelButton: true, confirmButtonText: "Void entry", confirmButtonColor: "#ef4444",
     });
     if (!r.isConfirmed) return;
@@ -462,7 +462,7 @@ function Register({ isAdmin, refreshKey, onChanged }) {
   };
   const exportCsv = () => downloadCsv(`connection-events_${from}_${to}.csv`,
     ["Date", "Event", "Product", "Type", "Qty", "Filled Out", "Empty In", "Missing", "Amount", "Mode", "Penalty", "Net Paid", "Penalty Items", "Remarks", "By"],
-    data.events.map(e => [e.date, TYPE_LABEL[e.eventType], productLabel(e.productId), e.connectionType || "", e.qty, e.cylindersOut, e.cylindersIn, e.cylindersMissing, e.amount, e.mode || "", e.penaltyDeducted, e.netPaid, e.penalties.map(p => `${p.item}=${p.amount}`).join("; "), e.remarks, e.recordedBy]));
+    data.events.map(e => [e.date, TYPE_LABEL[e.eventType], productLabel(e.productId, products), e.connectionType || "", e.qty, e.cylindersOut, e.cylindersIn, e.cylindersMissing, e.amount, e.mode || "", e.penaltyDeducted, e.netPaid, e.penalties.map(p => `${p.item}=${p.amount}`).join("; "), e.remarks, e.recordedBy]));
   const tt = data?.totals;
   return (
     <div>
@@ -480,13 +480,13 @@ function Register({ isAdmin, refreshKey, onChanged }) {
           <div className="stat-card" style={{ "--kpi-color": T.danger }}><div className="stat-val" style={{ color: T.danger }}>{inr(tt.netPaid)}</div><div className="stat-lbl">Refunds Paid (net)</div>{tt.penaltyDeducted > 0 && <div className="stat-delta" style={{ color: T.warn }}>{inr(tt.penaltyDeducted)} penalties</div>}</div>
         </div>
       )}
-      <EventsTable events={data?.events || []} isAdmin={isAdmin} onVoid={voidEvent} />
+      <EventsTable events={data?.events || []} isAdmin={isAdmin} onVoid={voidEvent} products={products} />
     </div>
   );
 }
 
 /* ══════════════ Admin reports ══════════════ */
-function SummaryReport() {
+function SummaryReport({ products = PRODUCTS } = {}) {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayStr());
   const [d, setD] = useState(null);
@@ -494,7 +494,7 @@ function SummaryReport() {
   useEffect(() => { let alive = true; api.getConnectionsSummary(from, to).then(x => alive && setD(x)).catch(e => alive && setErr(e.message)); return () => { alive = false; }; }, [from, to]);
   const exportCsv = () => downloadCsv(`connections-summary_${from}_${to}.csv`,
     ["Product", "New Conn", "Single", "Double", "Cyl Issued (new)", "Add Bottles", "Collected Cash", "Collected Online", "Surrenders", "Cyl Returned", "Cyl Missing", "Refund Gross", "Penalties", "Net Paid", "Active Conn (all time)", "Issued (all time)", "Returned (all time)", "Missing (all time)", "With Customers"],
-    d.perProduct.map(p => [productLabel(p.productId), p.period.newConnections, p.period.newSingle, p.period.newDouble, p.period.newCylindersIssued, p.period.additionalBottles, p.period.additionalCash, p.period.additionalOnline, p.period.surrenders, p.period.cylindersReturned, p.period.cylindersMissing, p.period.refundAmount, p.period.penaltyDeducted, p.period.netPaid, p.market.activeConnections, p.market.issued, p.market.returned, p.market.missing, p.market.cylindersWithCustomers]));
+    d.perProduct.map(p => [productLabel(p.productId, products), p.period.newConnections, p.period.newSingle, p.period.newDouble, p.period.newCylindersIssued, p.period.additionalBottles, p.period.additionalCash, p.period.additionalOnline, p.period.surrenders, p.period.cylindersReturned, p.period.cylindersMissing, p.period.refundAmount, p.period.penaltyDeducted, p.period.netPaid, p.market.activeConnections, p.market.issued, p.market.returned, p.market.missing, p.market.cylindersWithCustomers]));
   if (err) return <div className="login-err">⚠️ {err}</div>;
   return (
     <div>
@@ -514,7 +514,7 @@ function SummaryReport() {
             <div style={{ overflowX: "auto" }}><table className="tbl">
               <thead><tr><th>Product</th><th style={{ textAlign: "right" }}>New Conn.</th><th style={{ textAlign: "right" }}>Single / Double</th><th style={{ textAlign: "right" }}>Cyl Issued (new)</th><th style={{ textAlign: "right" }}>Add. Bottles</th><th style={{ textAlign: "right" }}>Collected Cash</th><th style={{ textAlign: "right" }}>Collected Online</th><th style={{ textAlign: "right" }}>Surrenders</th><th style={{ textAlign: "right" }}>Cyl Returned</th><th style={{ textAlign: "right" }}>Missing</th><th style={{ textAlign: "right" }}>Refund Gross</th><th style={{ textAlign: "right" }}>Penalties</th><th style={{ textAlign: "right" }}>Net Paid</th></tr></thead>
               <tbody>
-                {d.perProduct.map(p => <tr key={p.productId}><td style={{ fontWeight: 600 }}>{productLabel(p.productId)}</td><td style={{ textAlign: "right" }}>{p.period.newConnections}</td><td style={{ textAlign: "right", fontSize: 11 }}>{p.period.newSingle} / {p.period.newDouble}</td><td style={{ textAlign: "right" }}>{p.period.newCylindersIssued}</td><td style={{ textAlign: "right" }}>{p.period.additionalBottles}</td><td style={{ textAlign: "right", color: T.success }}>{inr(p.period.additionalCash)}</td><td style={{ textAlign: "right", color: T.blue }}>{inr(p.period.additionalOnline)}</td><td style={{ textAlign: "right" }}>{p.period.surrenders}</td><td style={{ textAlign: "right" }}>{p.period.cylindersReturned}</td><td style={{ textAlign: "right", color: T.warn }}>{p.period.cylindersMissing}</td><td style={{ textAlign: "right" }}>{inr(p.period.refundAmount)}</td><td style={{ textAlign: "right", color: T.warn }}>{inr(p.period.penaltyDeducted)}</td><td style={{ textAlign: "right", color: T.danger, fontWeight: 700 }}>{inr(p.period.netPaid)}</td></tr>)}
+                {d.perProduct.map(p => <tr key={p.productId}><td style={{ fontWeight: 600 }}>{productLabel(p.productId, products)}</td><td style={{ textAlign: "right" }}>{p.period.newConnections}</td><td style={{ textAlign: "right", fontSize: 11 }}>{p.period.newSingle} / {p.period.newDouble}</td><td style={{ textAlign: "right" }}>{p.period.newCylindersIssued}</td><td style={{ textAlign: "right" }}>{p.period.additionalBottles}</td><td style={{ textAlign: "right", color: T.success }}>{inr(p.period.additionalCash)}</td><td style={{ textAlign: "right", color: T.blue }}>{inr(p.period.additionalOnline)}</td><td style={{ textAlign: "right" }}>{p.period.surrenders}</td><td style={{ textAlign: "right" }}>{p.period.cylindersReturned}</td><td style={{ textAlign: "right", color: T.warn }}>{p.period.cylindersMissing}</td><td style={{ textAlign: "right" }}>{inr(p.period.refundAmount)}</td><td style={{ textAlign: "right", color: T.warn }}>{inr(p.period.penaltyDeducted)}</td><td style={{ textAlign: "right", color: T.danger, fontWeight: 700 }}>{inr(p.period.netPaid)}</td></tr>)}
                 <tr className="tbl-total"><td>Total</td><td style={{ textAlign: "right" }}>{d.period.newConnections}</td><td></td><td style={{ textAlign: "right" }}>{d.perProduct.reduce((s, p) => s + p.period.newCylindersIssued, 0)}</td><td style={{ textAlign: "right" }}>{d.period.additionalBottles}</td><td style={{ textAlign: "right", color: T.success }}>{inr(d.period.additionalCash)}</td><td style={{ textAlign: "right", color: T.blue }}>{inr(d.period.additionalOnline)}</td><td style={{ textAlign: "right" }}>{d.period.surrenders}</td><td style={{ textAlign: "right" }}>{d.perProduct.reduce((s, p) => s + p.period.cylindersReturned, 0)}</td><td style={{ textAlign: "right", color: T.warn }}>{d.perProduct.reduce((s, p) => s + p.period.cylindersMissing, 0)}</td><td style={{ textAlign: "right" }}>{inr(d.period.refundAmount)}</td><td style={{ textAlign: "right", color: T.warn }}>{inr(d.period.penaltyDeducted)}</td><td style={{ textAlign: "right", color: T.danger }}>{inr(d.period.netPaid)}</td></tr>
               </tbody></table></div>
           </div>
@@ -526,7 +526,7 @@ function SummaryReport() {
               <tbody>
                 {d.perProduct.map(p => (
                   <tr key={p.productId}>
-                    <td style={{ fontWeight: 600 }}>{productLabel(p.productId)}</td>
+                    <td style={{ fontWeight: 600 }}>{productLabel(p.productId, products)}</td>
                     <td style={{ textAlign: "right" }}>{p.market.activeConnections}</td>
                     <td style={{ textAlign: "right", color: T.danger }}>{p.market.issued}</td>
                     <td style={{ textAlign: "right", color: T.success }}>{p.market.returned}</td>
@@ -548,7 +548,7 @@ function SummaryReport() {
   );
 }
 
-function MonthlyReport() {
+function MonthlyReport({ products = PRODUCTS } = {}) {
   const [productId, setProductId] = useState("");
   const [d, setD] = useState(null);
   const [err, setErr] = useState("");
@@ -559,12 +559,12 @@ function MonthlyReport() {
   return (
     <div>
       <div className="period-row" style={{ alignItems: "center" }}>
-        <select className="inp" value={productId} onChange={e => setProductId(e.target.value)} style={{ width: 200 }}><option value="">All products</option>{PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select>
+        <select className="inp" value={productId} onChange={e => setProductId(e.target.value)} style={{ width: 200 }}><option value="">All products</option>{(products || PRODUCTS).map(p => <option key={p.id} value={p.id}>{p.label || p.short}</option>)}</select>
         <button className="btn-ghost" onClick={exportCsv} disabled={!d || !d.months.length}>⬇ Export CSV</button>
       </div>
       {err && <div className="login-err">⚠️ {err}</div>}
       <div className="card">
-        <div className="card-head"><span className="card-head-title">📆 Month-wise Trend {productId ? `· ${productLabel(productId)}` : "· all products"}</span></div>
+        <div className="card-head"><span className="card-head-title">📆 Month-wise Trend {productId ? `· ${productLabel(productId, products)}` : "· all products"}</span></div>
         <div style={{ overflowX: "auto" }}><table className="tbl">
           <thead><tr><th>Month</th><th style={{ textAlign: "right" }}>New Conn.</th><th style={{ textAlign: "right" }}>Cyl Issued</th><th style={{ textAlign: "right" }}>Add. Bottles</th><th style={{ textAlign: "right" }}>Collected Cash</th><th style={{ textAlign: "right" }}>Collected Online</th><th style={{ textAlign: "right" }}>Surrenders</th><th style={{ textAlign: "right" }}>Cyl Returned</th><th style={{ textAlign: "right" }}>Missing</th><th style={{ textAlign: "right" }}>Refund Gross</th><th style={{ textAlign: "right" }}>Penalties</th><th style={{ textAlign: "right" }}>Net Paid</th><th style={{ textAlign: "right" }}>Net Cash Effect</th><th style={{ textAlign: "right" }}>Net Conn.</th></tr></thead>
           <tbody>
@@ -577,7 +577,7 @@ function MonthlyReport() {
   );
 }
 
-function PaymentsReport() {
+function PaymentsReport({ products = PRODUCTS } = {}) {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayStr());
   const [mode, setMode] = useState("");
@@ -587,11 +587,11 @@ function PaymentsReport() {
   useEffect(() => { let alive = true; api.getConnectionPayments({ from, to, mode, productId }).then(x => alive && setD(x)).catch(e => alive && setErr(e.message)); return () => { alive = false; }; }, [from, to, mode, productId]);
   const exportCsv = () => downloadCsv(`connection-payments_${from}_${to}.csv`,
     ["Date", "Product", "Bottles", "Mode", "Amount", "Remarks", "Recorded By"],
-    d.rows.map(r => [r.date, productLabel(r.productId), r.qty, r.mode, r.amount, r.remarks, r.recordedBy]));
+    d.rows.map(r => [r.date, productLabel(r.productId, products), r.qty, r.mode, r.amount, r.remarks, r.recordedBy]));
   return (
     <div>
       <RangeBar from={from} to={to} setFrom={setFrom} setTo={setTo} onExport={d && exportCsv} count={d?.rows.length}
-        extra={<select className="inp" value={productId} onChange={e => setProductId(e.target.value)} style={{ width: 150 }}><option value="">All products</option>{PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.short}</option>)}</select>} />
+        extra={<select className="inp" value={productId} onChange={e => setProductId(e.target.value)} style={{ width: 150 }}><option value="">All products</option>{(products || PRODUCTS).map(p => <option key={p.id} value={p.id}>{p.short || p.label}</option>)}</select>} />
       <div className="period-row">
         {[["", "All modes"], ["cash", "💵 Cash only"], ["online", "🏦 Online only"]].map(([v, l]) => <button key={v} className="btn-ghost" style={{ background: mode === v ? T.accent : "transparent", color: mode === v ? "#fff" : T.inkMid, borderColor: mode === v ? T.accent : T.border }} onClick={() => setMode(v)}>{l}</button>)}
       </div>
@@ -609,14 +609,14 @@ function PaymentsReport() {
           <thead><tr><th>Date</th><th>Product</th><th style={{ textAlign: "right" }}>Bottles</th><th>Mode</th><th style={{ textAlign: "right" }}>Amount</th><th>Remarks</th><th>By</th></tr></thead>
           <tbody>
             {(!d || d.rows.length === 0) && <tr><td colSpan={7} style={{ padding: 20, color: T.inkLight }}>{d ? "No payments in this range." : "Loading…"}</td></tr>}
-            {d?.rows.map(r => <tr key={r.id}><td style={{ whiteSpace: "nowrap" }}>{fmtDate(r.date)}</td><td style={{ fontWeight: 600 }}>{productLabel(r.productId)}</td><td style={{ textAlign: "right" }}>{r.qty}</td><td><span className={`badge ${r.mode === "cash" ? "badge-success" : "badge-blue"}`}>{r.mode}</span></td><td style={{ textAlign: "right", fontWeight: 700, color: r.mode === "cash" ? T.success : T.blue }}>{inr(r.amount)}</td><td style={{ fontSize: 11, color: T.inkLight }}>{r.remarks || "—"}</td><td style={{ fontSize: 11 }}>{r.recordedBy}</td></tr>)}
+            {d?.rows.map(r => <tr key={r.id}><td style={{ whiteSpace: "nowrap" }}>{fmtDate(r.date)}</td><td style={{ fontWeight: 600 }}>{productLabel(r.productId, products)}</td><td style={{ textAlign: "right" }}>{r.qty}</td><td><span className={`badge ${r.mode === "cash" ? "badge-success" : "badge-blue"}`}>{r.mode}</span></td><td style={{ textAlign: "right", fontWeight: 700, color: r.mode === "cash" ? T.success : T.blue }}>{inr(r.amount)}</td><td style={{ fontSize: 11, color: T.inkLight }}>{r.remarks || "—"}</td><td style={{ fontSize: 11 }}>{r.recordedBy}</td></tr>)}
           </tbody></table></div>
       </div>
     </div>
   );
 }
 
-function RefundsReport() {
+function RefundsReport({ products = PRODUCTS } = {}) {
   const [from, setFrom] = useState(monthStart());
   const [to, setTo] = useState(todayStr());
   const [productId, setProductId] = useState("");
@@ -626,11 +626,11 @@ function RefundsReport() {
   useEffect(() => { let alive = true; api.getConnectionRefunds({ from, to, productId }).then(x => alive && setD(x)).catch(e => alive && setErr(e.message)); return () => { alive = false; }; }, [from, to, productId]);
   const exportCsv = () => downloadCsv(`connection-refunds_${from}_${to}.csv`,
     ["Date", "Product", "Connections", "Refund Amount", "Penalty Deducted", "Net Paid", "Cylinders Returned", "Cylinders Missing", "Penalty Items", "Remarks", "Recorded By"],
-    d.rows.map(r => [r.date, productLabel(r.productId), r.qty, r.amount, r.penaltyDeducted, r.netPaid, r.cylindersIn, r.cylindersMissing, r.penalties.map(p => `${p.item}=${p.amount}`).join("; "), r.remarks, r.recordedBy]));
+    d.rows.map(r => [r.date, productLabel(r.productId, products), r.qty, r.amount, r.penaltyDeducted, r.netPaid, r.cylindersIn, r.cylindersMissing, r.penalties.map(p => `${p.item}=${p.amount}`).join("; "), r.remarks, r.recordedBy]));
   return (
     <div>
       <RangeBar from={from} to={to} setFrom={setFrom} setTo={setTo} onExport={d && exportCsv} count={d?.rows.length}
-        extra={<select className="inp" value={productId} onChange={e => setProductId(e.target.value)} style={{ width: 150 }}><option value="">All products</option>{PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.short}</option>)}</select>} />
+        extra={<select className="inp" value={productId} onChange={e => setProductId(e.target.value)} style={{ width: 150 }}><option value="">All products</option>{(products || PRODUCTS).map(p => <option key={p.id} value={p.id}>{p.short || p.label}</option>)}</select>} />
       {err && <div className="login-err">⚠️ {err}</div>}
       {d && (
         <div className="stat-row">
@@ -650,7 +650,7 @@ function RefundsReport() {
               {d?.rows.map(r => (
                 <React.Fragment key={r.id}>
                   <tr style={{ cursor: r.penalties.length ? "pointer" : "default", background: open === r.id ? "#f8fbff" : "transparent" }} onClick={() => setOpen(open === r.id ? null : r.id)}>
-                    <td style={{ whiteSpace: "nowrap" }}>{fmtDate(r.date)}</td><td style={{ fontWeight: 600 }}>{productLabel(r.productId)}</td><td style={{ textAlign: "right" }}>{r.qty}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{fmtDate(r.date)}</td><td style={{ fontWeight: 600 }}>{productLabel(r.productId, products)}</td><td style={{ textAlign: "right" }}>{r.qty}</td>
                     <td style={{ textAlign: "right" }}>{inr(r.amount)}</td><td style={{ textAlign: "right", color: T.warn }}>{r.penaltyDeducted > 0 ? `−${inr(r.penaltyDeducted)} ${open === r.id ? "▲" : "▼"}` : "—"}</td><td style={{ textAlign: "right", fontWeight: 700, color: T.danger }}>{inr(r.netPaid)}</td>
                     <td>{r.cylindersIn}{r.cylindersMissing > 0 ? <span style={{ color: T.warn }}> / {r.cylindersMissing} missing</span> : ""}</td><td style={{ fontSize: 11, color: T.inkLight }}>{r.remarks || "—"}</td><td style={{ fontSize: 11 }}>{r.recordedBy}</td>
                   </tr>
@@ -694,7 +694,7 @@ function AuditTrail() {
 }
 
 /* ══════════════ Tab shell ══════════════ */
-export default function ConnectionsTab({ isAdmin, onChanged }) {
+export default function ConnectionsTab({ isAdmin, onChanged, products }) {
   const [sub, setSub] = useState("register");
   const [refreshKey, setRefreshKey] = useState(0);
   const changed = () => { setRefreshKey(k => k + 1); onChanged && onChanged(); };
@@ -710,11 +710,11 @@ export default function ConnectionsTab({ isAdmin, onChanged }) {
       <div className="prod-tabs">
         {SUBS.map(([id, label]) => <button key={id} className={`prod-tab${sub === id ? " active" : ""}`} onClick={() => setSub(id)}>{label}</button>)}
       </div>
-      {sub === "register" && <Register isAdmin={isAdmin} refreshKey={refreshKey} onChanged={onChanged} />}
-      {isAdmin && sub === "summary" && <SummaryReport />}
-      {isAdmin && sub === "monthly" && <MonthlyReport />}
-      {isAdmin && sub === "payments" && <PaymentsReport />}
-      {isAdmin && sub === "refunds" && <RefundsReport />}
+      {sub === "register" && <Register isAdmin={isAdmin} refreshKey={refreshKey} onChanged={onChanged} products={products} />}
+      {isAdmin && sub === "summary" && <SummaryReport products={products} />}
+      {isAdmin && sub === "monthly" && <MonthlyReport products={products} />}
+      {isAdmin && sub === "payments" && <PaymentsReport products={products} />}
+      {isAdmin && sub === "refunds" && <RefundsReport products={products} />}
       {isAdmin && sub === "audit" && <AuditTrail />}
     </div>
   );
