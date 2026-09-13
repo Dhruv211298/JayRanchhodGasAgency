@@ -2254,6 +2254,7 @@ const AGG_COLS = `product_id AS productId, event_type AS eventType, connection_t
 
 const emptyBucket = () => ({ events: 0, qty: 0, cylindersOut: 0, cylindersIn: 0, cylindersMissing: 0, amount: 0, cash: 0, online: 0, penalty: 0, netPaid: 0 });
 const addBucket = (b, r) => {
+  if (!b || !r) return b;
   for (const k of Object.keys(b)) b[k] = round2(b[k] + num(r[k]));
   return b;
 };
@@ -2265,36 +2266,68 @@ app.get('/api/connections/reports/summary', verifyToken, requireAdmin, async (re
   const from = req.query.from || '1970-01-01';
   const to = req.query.to || todayLocal();
   try {
-    const [products] = await pool.query('SELECT id FROM products');
-    const [periodRows] = await pool.query(
-      `SELECT ${AGG_COLS} FROM connection_events WHERE event_date BETWEEN ? AND ? GROUP BY product_id, event_type, connection_type`, [from, to]);
-    const [allRows] = await pool.query(
-      `SELECT ${AGG_COLS} FROM connection_events GROUP BY product_id, event_type, connection_type`);
+    const [productsRows] = await pool.query('SELECT id, label, category, is_active FROM products ORDER BY sort_order ASC, id ASC');
+    const cylinderRows = productsRows.filter(p => p.category !== 'accessory' && p.is_active !== 0 && p.isActive !== 0);
+    const products = cylinderRows.length > 0 ? cylinderRows : productsRows;
+
+    let periodRows = [];
+    try {
+      [periodRows] = await pool.query(
+        `SELECT ${AGG_COLS} FROM connection_events WHERE event_date BETWEEN ? AND ? GROUP BY product_id, event_type, connection_type`, [from, to]);
+    } catch (e1) {
+      console.warn('Period rows query fallback:', e1.message);
+    }
+
+    let allRows = [];
+    try {
+      [allRows] = await pool.query(
+        `SELECT ${AGG_COLS} FROM connection_events GROUP BY product_id, event_type, connection_type`);
+    } catch (e2) {
+      console.warn('All rows query fallback:', e2.message);
+    }
+
     // Latest recorded closing stock + godown count per product for the cross-check.
-    const [stockRows] = await pool.query(
-      `SELECT s.product_id AS productId, s.closing_stock AS closingStock, DATE_FORMAT(s.entry_date, '%Y-%m-%d') AS date
-         FROM daily_product_stock s
-         JOIN (SELECT product_id, MAX(entry_date) AS d FROM daily_product_stock GROUP BY product_id) m
-           ON m.product_id = s.product_id AND m.d = s.entry_date`);
-    const [godownRows] = await pool.query(
-      `SELECT g.product_id AS productId, g.filled_qty AS filled, g.empty_qty AS empty, DATE_FORMAT(g.entry_date, '%Y-%m-%d') AS date
-         FROM godown_stock g
-         JOIN (SELECT product_id, MAX(entry_date) AS d FROM godown_stock GROUP BY product_id) m
-           ON m.product_id = g.product_id AND m.d = g.entry_date`);
+    let stockRows = [];
+    try {
+      [stockRows] = await pool.query(
+        `SELECT s.product_id AS productId, s.closing_stock AS closingStock, DATE_FORMAT(s.entry_date, '%Y-%m-%d') AS date
+           FROM daily_product_stock s
+           JOIN (SELECT product_id, MAX(entry_date) AS d FROM daily_product_stock GROUP BY product_id) m
+             ON m.product_id = s.product_id AND m.d = s.entry_date`);
+    } catch (stErr) {
+      console.warn('Stock rows load error in summary:', stErr.message);
+    }
+
+    let godownRows = [];
+    try {
+      [godownRows] = await pool.query(
+        `SELECT g.product_id AS productId, g.filled_qty AS filled, g.empty_qty AS empty, DATE_FORMAT(g.entry_date, '%Y-%m-%d') AS date
+           FROM godown_stock g
+           JOIN (SELECT product_id, MAX(entry_date) AS d FROM godown_stock GROUP BY product_id) m
+             ON m.product_id = g.product_id AND m.d = g.entry_date`);
+    } catch (gdErr) {
+      console.warn('Godown rows load error in summary:', gdErr.message);
+    }
 
     const bucketise = (rows, pid) => {
       const b = { new: emptyBucket(), newSingle: emptyBucket(), newDouble: emptyBucket(), additional: emptyBucket(), surrender: emptyBucket() };
-      for (const r of rows.filter(r => r.productId === pid)) {
-        addBucket(b[r.eventType], r);
-        if (r.eventType === 'new') addBucket(r.connectionType === 'double' ? b.newDouble : b.newSingle, r);
+      for (const r of (rows || []).filter(r => r && r.productId === pid)) {
+        if (r.eventType && b[r.eventType]) {
+          addBucket(b[r.eventType], r);
+        }
+        if (r.eventType === 'new') {
+          const target = r.connectionType === 'double' ? b.newDouble : b.newSingle;
+          if (target) addBucket(target, r);
+        }
       }
       return b;
     };
-    const perProduct = products.map(p => {
+
+    const perProduct = (products || []).map(p => {
       const period = bucketise(periodRows, p.id);
       const all = bucketise(allRows, p.id);
-      const st = stockRows.find(r => r.productId === p.id) || {};
-      const gd = godownRows.find(r => r.productId === p.id) || {};
+      const st = (stockRows || []).find(r => r && r.productId === p.id) || {};
+      const gd = (godownRows || []).find(r => r && r.productId === p.id) || {};
       const issued = all.new.cylindersOut + all.additional.cylindersOut;
       const returned = all.surrender.cylindersIn;
       const missing = all.surrender.cylindersMissing;
@@ -2316,13 +2349,15 @@ app.get('/api/connections/reports/summary', verifyToken, requireAdmin, async (re
           cylindersWithCustomers: issued - returned - missing,
         },
         stock: {
-          closingStock: st.closingStock !== undefined ? num(st.closingStock) : null, asOf: st.date || null,
-          godownFilled: gd.filled !== undefined ? num(gd.filled) : null, godownEmpty: gd.empty !== undefined ? num(gd.empty) : null, godownAsOf: gd.date || null,
+          closingStock: st.closingStock !== undefined && st.closingStock !== null ? num(st.closingStock) : null, asOf: st.date || null,
+          godownFilled: gd.filled !== undefined && gd.filled !== null ? num(gd.filled) : null, godownEmpty: gd.empty !== undefined && gd.empty !== null ? num(gd.empty) : null, godownAsOf: gd.date || null,
         },
       };
     });
-    const sumP = (k) => round2(perProduct.reduce((s, p) => s + p.period[k], 0));
-    const sumM = (k) => perProduct.reduce((s, p) => s + p.market[k], 0);
+
+    const sumP = (k) => round2(perProduct.reduce((s, p) => s + num(p.period && p.period[k]), 0));
+    const sumM = (k) => perProduct.reduce((s, p) => s + num(p.market && p.market[k]), 0);
+
     res.json({
       from, to,
       period: {
@@ -2337,7 +2372,7 @@ app.get('/api/connections/reports/summary', verifyToken, requireAdmin, async (re
     });
   } catch (error) {
     console.error('Connections summary error:', error);
-    res.status(500).json({ error: 'Could not build the connections report.' });
+    res.status(500).json({ error: 'Could not build the connections report.', message: error.message });
   }
 });
 

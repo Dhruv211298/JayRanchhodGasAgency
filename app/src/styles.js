@@ -185,6 +185,51 @@ body {
   background: #f8fafc;
 }
 
+/* ── Product & Sub-Report Segmented Pill Tabs ── */
+.prod-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #f8fafc;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 18px;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+.prod-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  white-space: nowrap;
+}
+.prod-tab:hover:not(.active) {
+  color: #0f172a;
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  transform: translateY(-1px);
+}
+.prod-tab.active {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  color: #ffffff;
+  border-color: #c2410c;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.28);
+  transform: translateY(-1px);
+}
+
 /* ── Main Container ── */
 .main {
   padding: 24px;

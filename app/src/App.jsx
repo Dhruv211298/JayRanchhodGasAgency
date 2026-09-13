@@ -450,6 +450,10 @@ export default function App() {
             products={products}
             onChanged={onConnectionsChanged}
             prices={prices}
+            onNavigate={(targetTab, targetDate) => {
+              if (targetDate) handleDateChange(targetDate);
+              setTab(targetTab);
+            }}
           />
         )}
 
@@ -467,6 +471,10 @@ export default function App() {
             products={products}
             onChanged={onConnectionsChanged}
             prices={prices}
+            onNavigate={(targetTab, targetDate) => {
+              if (targetDate) handleDateChange(targetDate);
+              setTab(targetTab);
+            }}
           />
         )}
         {tab === "admin-credits" && <AdminCreditOverview pending={pending} products={products} />}

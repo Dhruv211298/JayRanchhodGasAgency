@@ -629,22 +629,176 @@ export function AdminCommission({ commissions, setCommissions, products = PRODUC
   );
 }
 
-export function AdminDayReports({ entries, commissions, products = PRODUCTS }) {
+export function AdminDayReports({ entries, commissions, products = PRODUCTS, onNavigate = null }) {
   const sorted = [...entries].sort((a,b)=>b.date.localeCompare(a.date));
-  const [selDate, setSelDate] = useState(sorted[0]?.date || todayStr());
-  const entry = entries.find(e=>e.date===selDate);
+  const [selDate, setSelDate] = useState(() => sorted[0]?.date || todayStr());
+
+  // If selDate is not set or entries list changes, allow smooth sync
+  useEffect(() => {
+    if (sorted.length > 0 && !entries.some(e => e.date === selDate)) {
+      setSelDate(sorted[0].date);
+    }
+  }, [entries]);
+
+  const entry = entries.find(e => e.date === selDate);
+
+  const changeDay = (delta) => {
+    const d = new Date(selDate + "T00:00:00");
+    d.setDate(d.getDate() + delta);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    setSelDate(`${yyyy}-${mm}-${dd}`);
+  };
 
   return (
     <div className="fade-in">
-      <div style={{marginBottom: 16}}>
-        <select className="inp" value={selDate} onChange={e=>setSelDate(e.target.value)} style={{maxWidth: 300}}>
-          {sorted.length===0 && <option>No entries</option>}
-          {sorted.map(e=><option key={e.date} value={e.date}>{fmtDate(e.date)}</option>)}
-        </select>
+      {/* Interactive Date Navigation Bar */}
+      <div
+        className="card"
+        style={{
+          marginBottom: 16,
+          padding: "14px 18px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 12,
+          background: "#ffffff",
+          border: `1px solid ${T.border}`,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ padding: "7px 12px", display: "flex", alignItems: "center", gap: 4 }}
+            onClick={() => changeDay(-1)}
+            title="Previous Day"
+          >
+            ◀ Prev Day
+          </button>
+
+          <input
+            type="date"
+            className="inp"
+            style={{ width: 160, fontWeight: 700, textAlign: "center" }}
+            value={selDate}
+            max={todayStr()}
+            onChange={(e) => setSelDate(e.target.value)}
+          />
+
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{ padding: "7px 12px", display: "flex", alignItems: "center", gap: 4 }}
+            onClick={() => changeDay(1)}
+            disabled={selDate >= todayStr()}
+            title="Next Day"
+          >
+            Next Day ▶
+          </button>
+
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{
+              padding: "7px 14px",
+              background: selDate === todayStr() ? "rgba(234, 88, 12, 0.08)" : "transparent",
+              color: selDate === todayStr() ? T.accent : T.ink,
+              borderColor: selDate === todayStr() ? T.accent : T.border,
+              fontWeight: 700
+            }}
+            onClick={() => setSelDate(todayStr())}
+          >
+            📅 Today
+          </button>
+
+          {sorted.length > 0 && (
+            <select
+              className="inp"
+              value={entry ? selDate : ""}
+              onChange={(e) => e.target.value && setSelDate(e.target.value)}
+              style={{ maxWidth: 220, fontSize: 13 }}
+            >
+              <option value="" disabled>— Jump to Saved Date ({sorted.length}) —</option>
+              {sorted.map(e => (
+                <option key={e.date} value={e.date}>
+                  {fmtDate(e.date)} {e.date === todayStr() ? " (Today)" : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {entry ? (
+            <>
+              <span className="badge badge-success" style={{ fontSize: 12, padding: "5px 10px" }}>
+                ● Saved Entry Found
+              </span>
+              {onNavigate && (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    color: T.accent,
+                    borderColor: T.accent
+                  }}
+                  onClick={() => onNavigate("admin-entry", selDate)}
+                >
+                  ✏️ Edit in Daily Entry
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="badge" style={{ background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a", fontSize: 12, padding: "5px 10px" }}>
+              ○ No Entry for this date
+            </span>
+          )}
+        </div>
       </div>
 
       {!entry ? (
-        <div className="card"><div className="card-body" style={{textAlign:"center",padding:40,color:T.inkLight}}>No entry found for this date.</div></div>
+        <div
+          className="card"
+          style={{
+            textAlign: "center",
+            padding: "48px 24px",
+            background: "#ffffff",
+            border: "1px dashed #cbd5e1"
+          }}
+        >
+          <div style={{ fontSize: 44, marginBottom: 12 }}>📋</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, marginBottom: 6 }}>
+            No Daily Entry Found for {fmtDate(selDate)}
+          </div>
+          <div style={{ fontSize: 13, color: T.inkLight, maxWidth: 460, margin: "0 auto 20px" }}>
+            No daily sales, plant deliveries, or cash drawer closing has been recorded for this date in the system yet.
+          </div>
+          {onNavigate && (
+            <button
+              type="button"
+              className="btn-primary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 24px",
+                fontSize: 14
+              }}
+              onClick={() => onNavigate("admin-entry", selDate)}
+            >
+              <span>📝</span> Open Daily Entry for {fmtDate(selDate)} →
+            </button>
+          )}
+        </div>
       ) : (
         <AdminDayDetail entry={entry} commissions={commissions} products={products} />
       )}
