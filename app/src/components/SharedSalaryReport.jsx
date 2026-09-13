@@ -2,10 +2,74 @@ import React, { useState, useMemo } from "react";
 import { T } from "../styles";
 import { inr, num, fmtDate, fmtMonth, todayStr, downloadCsv } from "../constants";
 
-export default function SharedSalaryReport({ entries = [], employees = [], isAdmin = false }) {
-  // System went live in August 2026 — accounting for salaries starts strictly from this date
-  const SYSTEM_START_MONTH = "2026-08";
+// System went live in August 2026 — accounting for salaries starts strictly from this date
+const SYSTEM_START_MONTH = "2026-08";
 
+/**
+ * Computes a running balance ledger across chronological months for an employee.
+ * Any overpaid balance (negative) or unpaid balance (positive) carries forward into the next month.
+ */
+function computeEmpLedger(emp, monthsList, payments, systemStartMonth = SYSTEM_START_MONTH) {
+  if (!emp) return {};
+  const rawJoin = emp.join_date || emp.joinDate || "";
+  const empJoinMonth = rawJoin ? rawJoin.slice(0, 7) : systemStartMonth;
+  const empStartMonth = empJoinMonth > systemStartMonth ? empJoinMonth : systemStartMonth;
+  const baseSalary = num(emp.salary || emp.base_salary || emp.baseSalary || 12000);
+
+  // Chronological order (oldest to newest: e.g. "2026-08", "2026-09")
+  const chrono = [...monthsList].sort((a, b) => a.localeCompare(b));
+  let runningCarryForward = 0;
+  const ledger = {};
+
+  for (const mStr of chrono) {
+    if (mStr < empStartMonth) {
+      ledger[mStr] = {
+        month: mStr,
+        notJoinedYet: true,
+        baseSalary: 0,
+        carryForward: 0,
+        netPayable: 0,
+        advance: 0,
+        salaryPaid: 0,
+        totalPaid: 0,
+        balance: 0,
+        payments: []
+      };
+      continue;
+    }
+
+    const mPayments = payments.filter(
+      p => String(p.employeeId) === String(emp.id) && p.effectiveMonth === mStr
+    );
+    const advance = mPayments.filter(p => p.type === "Advance").reduce((s, p) => s + num(p.amt), 0);
+    const salaryPaid = mPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
+    const totalPaid = advance + salaryPaid;
+
+    const carryForward = runningCarryForward;
+    const netPayable = baseSalary + carryForward;
+    const balance = netPayable - totalPaid;
+
+    ledger[mStr] = {
+      month: mStr,
+      notJoinedYet: false,
+      baseSalary,
+      carryForward,
+      netPayable,
+      advance,
+      salaryPaid,
+      totalPaid,
+      balance,
+      payments: mPayments
+    };
+
+    // Closing balance carries forward to the following month
+    runningCarryForward = balance;
+  }
+
+  return ledger;
+}
+
+export default function SharedSalaryReport({ entries = [], employees = [], isAdmin = false }) {
   // Current month string "YYYY-MM"
   const currentMonthStr = todayStr().slice(0, 7);
 
@@ -116,36 +180,39 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
   // ════════════════════════════════════════════════════════════════
   const monthSummaries = useMemo(() => {
     return (employees || []).map(emp => {
-      const rawJoin = emp.join_date || emp.joinDate || "";
-      const empJoinMonth = rawJoin ? rawJoin.slice(0, 7) : SYSTEM_START_MONTH;
-      const effectiveStartMonth = empJoinMonth > SYSTEM_START_MONTH ? empJoinMonth : SYSTEM_START_MONTH;
-      const notJoinedYet = effectiveStartMonth > selectedMonth;
-
-      const empPayments = allPayments.filter(
-        p => String(p.employeeId) === String(emp.id) && p.effectiveMonth === selectedMonth
-      );
-      const baseSalary = notJoinedYet ? 0 : num(emp.salary || emp.base_salary || emp.baseSalary || 12000);
-      const advance = empPayments.filter(p => p.type === "Advance").reduce((s, p) => s + num(p.amt), 0);
-      const salaryPaid = empPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
-      const totalPaid = advance + salaryPaid;
-      const balance = baseSalary - totalPaid;
+      const ledger = computeEmpLedger(emp, availableMonths, allPayments, SYSTEM_START_MONTH);
+      const row = ledger[selectedMonth] || {
+        baseSalary: num(emp.salary || emp.base_salary || emp.baseSalary || 12000),
+        carryForward: 0,
+        netPayable: num(emp.salary || emp.base_salary || emp.baseSalary || 12000),
+        advance: 0,
+        salaryPaid: 0,
+        totalPaid: 0,
+        balance: num(emp.salary || emp.base_salary || emp.baseSalary || 12000),
+        notJoinedYet: false,
+        payments: []
+      };
       return {
         ...emp,
-        baseSalary,
-        advance,
-        salaryPaid,
-        totalPaid,
-        balance,
-        notJoinedYet,
-        paymentCount: empPayments.length
+        baseSalary: row.baseSalary,
+        carryForward: row.carryForward,
+        netPayable: row.netPayable,
+        advance: row.advance,
+        salaryPaid: row.salaryPaid,
+        totalPaid: row.totalPaid,
+        balance: row.balance,
+        notJoinedYet: row.notJoinedYet,
+        paymentCount: (row.payments || []).length
       };
     });
-  }, [employees, allPayments, selectedMonth]);
+  }, [employees, allPayments, selectedMonth, availableMonths]);
 
   const monthTotals = useMemo(() => {
     return monthSummaries.reduce(
       (acc, s) => {
         acc.baseSalary += s.baseSalary;
+        acc.carryForward += s.carryForward;
+        acc.netPayable += s.netPayable;
         acc.advance += s.advance;
         acc.salaryPaid += s.salaryPaid;
         acc.totalPaid += s.totalPaid;
@@ -153,7 +220,7 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
         if (s.balance < 0) acc.totalOverpaid += Math.abs(s.balance);
         return acc;
       },
-      { baseSalary: 0, advance: 0, salaryPaid: 0, totalPaid: 0, totalDue: 0, totalOverpaid: 0 }
+      { baseSalary: 0, carryForward: 0, netPayable: 0, advance: 0, salaryPaid: 0, totalPaid: 0, totalDue: 0, totalOverpaid: 0 }
     );
   }, [monthSummaries]);
 
@@ -175,46 +242,50 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
     if (!currentSelectedEmp) return [];
     const rawJoin = currentSelectedEmp.join_date || currentSelectedEmp.joinDate || "";
     const empJoinMonth = rawJoin ? rawJoin.slice(0, 7) : SYSTEM_START_MONTH;
-    // Employee's salary ledger starts from their join month or system launch, whichever is later
     const empStartMonth = empJoinMonth > SYSTEM_START_MONTH ? empJoinMonth : SYSTEM_START_MONTH;
-    const baseSalary = num(currentSelectedEmp.salary || currentSelectedEmp.base_salary || currentSelectedEmp.baseSalary || 12000);
 
-    // Only include months from the employee's active starting month onwards
+    const ledger = computeEmpLedger(currentSelectedEmp, availableMonths, allPayments, SYSTEM_START_MONTH);
     const empMonths = availableMonths.filter(mStr => mStr >= empStartMonth);
 
-    return empMonths.map(mStr => {
-      const mPayments = allPayments.filter(
-        p => String(p.employeeId) === String(currentSelectedEmp.id) && p.effectiveMonth === mStr
-      );
-      const advance = mPayments.filter(p => p.type === "Advance").reduce((s, p) => s + num(p.amt), 0);
-      const salaryPaid = mPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
-      const totalPaid = advance + salaryPaid;
-      const balance = baseSalary - totalPaid;
-      return {
-        month: mStr,
-        baseSalary,
-        advance,
-        salaryPaid,
-        totalPaid,
-        balance,
-        payments: mPayments
-      };
+    return empMonths.map(mStr => ledger[mStr] || {
+      month: mStr,
+      baseSalary: num(currentSelectedEmp.salary || currentSelectedEmp.base_salary || currentSelectedEmp.baseSalary || 12000),
+      carryForward: 0,
+      netPayable: num(currentSelectedEmp.salary || currentSelectedEmp.base_salary || currentSelectedEmp.baseSalary || 12000),
+      advance: 0,
+      salaryPaid: 0,
+      totalPaid: 0,
+      balance: num(currentSelectedEmp.salary || currentSelectedEmp.base_salary || currentSelectedEmp.baseSalary || 12000),
+      payments: []
     });
   }, [currentSelectedEmp, availableMonths, allPayments]);
 
   const empLifetimeTotals = useMemo(() => {
-    return empMonthByMonth.reduce(
+    const totals = empMonthByMonth.reduce(
       (acc, m) => {
         acc.totalBase += m.baseSalary;
         acc.totalAdvance += m.advance;
         acc.totalSalaryPaid += m.salaryPaid;
         acc.totalPaid += m.totalPaid;
-        if (m.balance > 0) acc.totalDue += m.balance;
-        if (m.balance < 0) acc.totalOverpaid += Math.abs(m.balance);
         return acc;
       },
       { totalBase: 0, totalAdvance: 0, totalSalaryPaid: 0, totalPaid: 0, totalDue: 0, totalOverpaid: 0 }
     );
+
+    // In a running ledger, the latest active month's balance is the cumulative net position
+    const latestBalance = empMonthByMonth[0]?.balance ?? 0;
+    if (latestBalance > 0) {
+      totals.totalDue = latestBalance;
+      totals.totalOverpaid = 0;
+    } else if (latestBalance < 0) {
+      totals.totalDue = 0;
+      totals.totalOverpaid = Math.abs(latestBalance);
+    } else {
+      totals.totalDue = 0;
+      totals.totalOverpaid = 0;
+    }
+
+    return totals;
   }, [empMonthByMonth]);
 
   const empIndividualPayments = useMemo(() => {
@@ -227,17 +298,31 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
   // CSV Export helpers
   const exportMonthCsv = () => {
     const filename = `salary-report_${selectedMonth}.csv`;
-    const headers = ["Employee Name", "Role", "Month", "Base Salary", "Advance Taken", "Salary Paid", "Total Paid", "Balance Due", "Status"];
+    const headers = [
+      "Employee Name",
+      "Role",
+      "Month",
+      "Base Salary",
+      "Prev Carry Forward",
+      "Net Payable",
+      "Advance Taken",
+      "Salary Paid",
+      "Total Disbursed",
+      "Closing Balance",
+      "Status"
+    ];
     const rows = monthSummaries.map(s => [
       s.name,
       s.role,
       selectedMonth,
       s.baseSalary,
+      s.carryForward,
+      s.netPayable,
       s.advance,
       s.salaryPaid,
       s.totalPaid,
       s.balance,
-      s.balance < 0 ? "OVERPAID" : s.balance === 0 ? "SETTLED" : "DUE"
+      s.notJoinedYet ? "NOT JOINED" : s.balance < 0 ? "OVERPAID" : s.balance === 0 ? "SETTLED" : "DUE"
     ]);
     downloadCsv(filename, headers, rows);
   };
@@ -245,10 +330,22 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
   const exportEmployeeCsv = () => {
     if (!currentSelectedEmp) return;
     const filename = `salary-ledger_${currentSelectedEmp.name.replace(/\s+/g, '_')}.csv`;
-    const headers = ["Month", "Base Salary", "Advance Taken", "Salary Paid", "Total Paid", "Balance Due", "Status"];
+    const headers = [
+      "Month",
+      "Base Salary",
+      "Prev Carry Forward",
+      "Net Payable",
+      "Advance Taken",
+      "Salary Paid",
+      "Total Disbursed",
+      "Month Balance",
+      "Status"
+    ];
     const rows = empMonthByMonth.map(m => [
       m.month,
       m.baseSalary,
+      m.carryForward,
+      m.netPayable,
       m.advance,
       m.salaryPaid,
       m.totalPaid,
@@ -443,6 +540,18 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
               <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10.5 }}>{employees.length} Active Staff</div>
             </div>
 
+            <div className="stat-card" style={{ "--kpi-color": T.accent }}>
+              <div className="stat-val" style={{ color: T.accent }}>{inr(monthTotals.netPayable)}</div>
+              <div className="stat-lbl">Net Entitlement Payable</div>
+              <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10.5 }}>
+                {monthTotals.carryForward < 0
+                  ? `−${inr(Math.abs(monthTotals.carryForward))} carry-fwd deduction`
+                  : monthTotals.carryForward > 0
+                  ? `+${inr(monthTotals.carryForward)} prior unpaid carry-fwd`
+                  : "No carry-fwd adjustments"}
+              </div>
+            </div>
+
             <div className="stat-card" style={{ "--kpi-color": T.warn }}>
               <div className="stat-val" style={{ color: T.warn }}>{inr(monthTotals.advance)}</div>
               <div className="stat-lbl">Advance Taken</div>
@@ -486,14 +595,16 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
               <span style={{ fontSize: 11.5, color: T.inkLight }}>Click any employee row to drill down into their statement</span>
             </div>
             <div style={{ overflowX: "auto" }}>
-              <table className="tbl" style={{ minWidth: 840 }}>
+              <table className="tbl" style={{ minWidth: 920 }}>
                 <thead>
                   <tr>
                     <th style={{ textAlign: "left" }}>Employee</th>
                     <th style={{ textAlign: "right" }}>Base Salary</th>
+                    <th style={{ textAlign: "right" }} title="Opening balance carried from previous month: negative for over-advance deductions, positive for unpaid salary">Prev. Carry-Fwd</th>
+                    <th style={{ textAlign: "right" }} title="Base Salary adjusted by Previous Carry-Forward">Net Payable</th>
                     <th style={{ textAlign: "right" }}>Advance</th>
                     <th style={{ textAlign: "right" }}>Salary Paid</th>
-                    <th style={{ textAlign: "right" }}>Total Paid</th>
+                    <th style={{ textAlign: "right" }}>Total Disbursed</th>
                     <th style={{ textAlign: "right" }}>Balance Remaining</th>
                     <th style={{ textAlign: "center" }}>Status</th>
                     <th style={{ textAlign: "center" }}>Action</th>
@@ -529,7 +640,25 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                           </div>
                         </div>
                       </td>
-                      <td style={{ textAlign: "right", fontWeight: 700, color: T.ink }}>{inr(s.baseSalary)}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600, color: T.ink }}>{inr(s.baseSalary)}</td>
+                      <td style={{ textAlign: "right", fontWeight: 600 }}>
+                        {s.carryForward < 0 ? (
+                          <span style={{ color: T.danger }} title="Overpaid in previous month">
+                            −{inr(Math.abs(s.carryForward))}
+                            <span style={{ fontSize: 9.5, display: "block", color: "#dc2626", fontWeight: 500 }}>Over-advance</span>
+                          </span>
+                        ) : s.carryForward > 0 ? (
+                          <span style={{ color: T.blue }} title="Unpaid balance from previous month">
+                            +{inr(s.carryForward)}
+                            <span style={{ fontSize: 9.5, display: "block", color: T.inkLight, fontWeight: 500 }}>Prev. unpaid</span>
+                          </span>
+                        ) : (
+                          <span style={{ color: T.inkLight }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: "right", fontWeight: 700, color: T.ink }}>
+                        {inr(s.netPayable)}
+                      </td>
                       <td style={{ textAlign: "right", fontWeight: 600, color: s.advance > 0 ? T.warn : T.inkLight }}>
                         {s.advance > 0 ? inr(s.advance) : "₹0"}
                       </td>
@@ -571,6 +700,10 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                       Total ({employees.length} Staff)
                     </td>
                     <td style={{ textAlign: "right", fontWeight: 800, color: T.ink }}>{inr(monthTotals.baseSalary)}</td>
+                    <td style={{ textAlign: "right", fontWeight: 800, color: monthTotals.carryForward < 0 ? T.danger : monthTotals.carryForward > 0 ? T.blue : T.inkLight }}>
+                      {monthTotals.carryForward < 0 ? `−${inr(Math.abs(monthTotals.carryForward))}` : monthTotals.carryForward > 0 ? `+${inr(monthTotals.carryForward)}` : "—"}
+                    </td>
+                    <td style={{ textAlign: "right", fontWeight: 800, color: T.ink }}>{inr(monthTotals.netPayable)}</td>
                     <td style={{ textAlign: "right", fontWeight: 800, color: T.warn }}>{inr(monthTotals.advance)}</td>
                     <td style={{ textAlign: "right", fontWeight: 800, color: T.blue }}>{inr(monthTotals.salaryPaid)}</td>
                     <td style={{ textAlign: "right", fontWeight: 800, color: T.ink }}>{inr(monthTotals.totalPaid)}</td>
@@ -784,14 +917,16 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                   <span className="card-head-title">
                     📅 Month-by-Month Salary History: {currentSelectedEmp.name}
                   </span>
-                  <span style={{ fontSize: 11.5, color: T.inkLight }}>Full ledger breakdown by calendar month</span>
+                  <span style={{ fontSize: 11.5, color: T.inkLight }}>Full ledger breakdown with previous carry-forward adjustments</span>
                 </div>
                 <div style={{ overflowX: "auto" }}>
-                  <table className="tbl" style={{ minWidth: 800 }}>
+                  <table className="tbl" style={{ minWidth: 920 }}>
                     <thead>
                       <tr>
                         <th style={{ textAlign: "left" }}>Accounting Month</th>
                         <th style={{ textAlign: "right" }}>Base Salary</th>
+                        <th style={{ textAlign: "right" }} title="Opening balance carried from previous month">Prev. Carry-Fwd</th>
+                        <th style={{ textAlign: "right" }} title="Base Salary adjusted by Previous Carry-Forward">Net Payable</th>
                         <th style={{ textAlign: "right" }}>Advance Taken</th>
                         <th style={{ textAlign: "right" }}>Salary Paid</th>
                         <th style={{ textAlign: "right" }}>Total Disbursed</th>
@@ -815,6 +950,24 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                               )}
                             </td>
                             <td style={{ textAlign: "right", fontWeight: 600 }}>{inr(m.baseSalary)}</td>
+                            <td style={{ textAlign: "right", fontWeight: 600 }}>
+                              {m.carryForward < 0 ? (
+                                <span style={{ color: T.danger }} title="Overpaid in previous month">
+                                  −{inr(Math.abs(m.carryForward))}
+                                  <span style={{ fontSize: 9.5, display: "block", color: "#dc2626", fontWeight: 500 }}>Over-advance</span>
+                                </span>
+                              ) : m.carryForward > 0 ? (
+                                <span style={{ color: T.blue }} title="Unpaid balance from previous month">
+                                  +{inr(m.carryForward)}
+                                  <span style={{ fontSize: 9.5, display: "block", color: T.inkLight, fontWeight: 500 }}>Prev. unpaid</span>
+                                </span>
+                              ) : (
+                                <span style={{ color: T.inkLight }}>—</span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: "right", fontWeight: 700, color: T.ink }}>
+                              {inr(m.netPayable)}
+                            </td>
                             <td style={{ textAlign: "right", fontWeight: 600, color: m.advance > 0 ? T.warn : T.inkLight }}>
                               {m.advance > 0 ? inr(m.advance) : "₹0"}
                             </td>
