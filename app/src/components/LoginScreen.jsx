@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "motion/react";
 import { api } from "../api";
 import { T } from "../styles";
 
@@ -30,8 +31,13 @@ export default function LoginScreen({ onAuth }) {
   };
 
   return (
-    <div className="login-wrap">
-      <div className="login-card">
+    <div className="login-wrap" style={{ padding: "max(20px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom))" }}>
+      <motion.div
+        className="login-card"
+        initial={{ opacity: 0, scale: 0.96, y: 18 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      >
         {/* Top security tag */}
         <div style={{
           display: "inline-flex",
@@ -59,7 +65,7 @@ export default function LoginScreen({ onAuth }) {
             boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
             display: "inline-flex"
           }}>
-            <img src="/bpcl_logo.png" alt="Bharat Gas Logo" style={{ height: 60 }} />
+            <img src="/bpcl_logo.png" alt="Bharat Gas Logo" style={{ height: 58 }} />
           </div>
           <div className="login-logo-name">JAY RANCHHOD GAS SERVICE</div>
         </div>
@@ -84,7 +90,7 @@ export default function LoginScreen({ onAuth }) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
-              style={{ marginBottom: 12 }}
+              style={{ marginBottom: 12, minHeight: 46 }}
             />
 
             <label style={{ fontSize: 11.5, fontWeight: 700, color: "#475569", letterSpacing: "0.4px" }}>
@@ -97,16 +103,19 @@ export default function LoginScreen({ onAuth }) {
               value={pw}
               onChange={(e) => setPw(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && attemptLogin()}
+              style={{ minHeight: 46 }}
             />
 
-            <button
+            <motion.button
               className="login-btn"
               onClick={attemptLogin}
               disabled={loading}
-              style={{ marginTop: 18 }}
+              style={{ marginTop: 18, minHeight: 48, opacity: loading ? 0.75 : 1 }}
+              whileHover={{ scale: loading ? 1 : 1.01 }}
+              whileTap={{ scale: loading ? 1 : 0.98 }}
             >
               {loading ? "Authenticating Session..." : "Sign In to Portal →"}
-            </button>
+            </motion.button>
           </div>
 
           <div style={{
@@ -124,7 +133,7 @@ export default function LoginScreen({ onAuth }) {
             <span>🔒 End-to-End Encrypted Session</span>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

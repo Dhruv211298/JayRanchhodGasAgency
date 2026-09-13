@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { T } from "../styles";
 import {
   Register as ConnectionRegister,
@@ -181,60 +182,71 @@ export default function AllReportsTab({
         {tabs.map((tabItem) => {
           const isActive = sub === tabItem.id;
           return (
-            <button
+            <motion.button
               key={tabItem.id}
               type="button"
               className={`prod-tab${isActive ? " active" : ""}`}
               onClick={() => setSub(tabItem.id)}
+              whileTap={{ scale: 0.96 }}
             >
               <span style={{ fontSize: 15 }}>{tabItem.icon}</span>
               <span>{tabItem.label}</span>
-            </button>
+            </motion.button>
           );
         })}
       </div>
 
-      {/* Active Tab Panels */}
-      {isAdmin && sub === "day-reports" && (
-        <AdminDayReports
-          entries={entries}
-          commissions={commissions}
-          products={products}
-          onNavigate={onNavigate}
-        />
-      )}
+      {/* Active Tab Panels with Motion Animation */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={sub}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.16, ease: "easeOut" }}
+        >
+          {isAdmin && sub === "day-reports" && (
+            <AdminDayReports
+              entries={entries}
+              commissions={commissions}
+              products={products}
+              onNavigate={onNavigate}
+            />
+          )}
 
-      {!isAdmin && sub === "summary" && (
-        <UserSummary entries={entries} products={products} />
-      )}
+          {!isAdmin && sub === "summary" && (
+            <UserSummary entries={entries} products={products} />
+          )}
 
-      {sub === "salary" && (
-        <SharedSalaryReport entries={entries} employees={employees} isAdmin={isAdmin} />
-      )}
+          {sub === "salary" && (
+            <SharedSalaryReport entries={entries} employees={employees} isAdmin={isAdmin} />
+          )}
 
-      {sub === "conn-register" && (
-        <ConnectionRegister isAdmin={isAdmin} refreshKey={refreshKey} onChanged={changed} products={products} />
-      )}
+          {sub === "conn-register" && (
+            <ConnectionRegister isAdmin={isAdmin} refreshKey={refreshKey} onChanged={changed} products={products} />
+          )}
 
-      {isAdmin && sub === "conn-summary" && (
-        <ConnectionSummaryReport products={products} />
-      )}
+          {isAdmin && sub === "conn-summary" && (
+            <ConnectionSummaryReport products={products} />
+          )}
 
-      {isAdmin && sub === "conn-monthly" && (
-        <ConnectionMonthlyReport products={products} />
-      )}
+          {isAdmin && sub === "conn-monthly" && (
+            <ConnectionMonthlyReport products={products} />
+          )}
 
-      {isAdmin && sub === "conn-payments" && (
-        <ConnectionPaymentsReport products={products} />
-      )}
+          {isAdmin && sub === "conn-payments" && (
+            <ConnectionPaymentsReport products={products} />
+          )}
 
-      {isAdmin && sub === "conn-refunds" && (
-        <ConnectionRefundsReport products={products} />
-      )}
+          {isAdmin && sub === "conn-refunds" && (
+            <ConnectionRefundsReport products={products} />
+          )}
 
-      {isAdmin && sub === "conn-audit" && (
-        <ConnectionAuditTrail products={products} />
-      )}
+          {isAdmin && sub === "conn-audit" && (
+            <ConnectionAuditTrail products={products} />
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

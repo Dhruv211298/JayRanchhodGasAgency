@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import Swal from "sweetalert2";
 import { api } from "./api";
 import { T, injectCSS } from "./styles";
@@ -62,6 +63,7 @@ export default function App() {
   const [authedRole, setAuthedRole] = useState(null); // null | "user" | "admin"
   const [tab, setTab] = useState("entry");
   const [sessionChecked, setSessionChecked] = useState(false); // true once startup verification is done
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   const [entries, setEntries] = useState([]);
   const [pending, setPending] = useState([]);
@@ -332,7 +334,54 @@ export default function App() {
     { id: "admin-users", label: "👥 Users" },
   ];
 
+  const DRAWER_GROUPS_ADMIN = [
+    {
+      title: "Core Operations",
+      items: [
+        { id: "admin-dashboard", label: "Dashboard", icon: "⬛" },
+        { id: "admin-entry", label: "Daily Entry", icon: "📋" },
+        { id: "admin-history", label: "History", icon: "📅" },
+      ]
+    },
+    {
+      title: "Reports & Analytics",
+      items: [
+        { id: "admin-reports", label: "All Reports", icon: "📊" },
+        { id: "admin-credits", label: "Ledger", icon: "💳" },
+      ]
+    },
+    {
+      title: "Masters & Administration",
+      items: [
+        { id: "admin-prices", label: "Prices", icon: "📈" },
+        { id: "admin-comm", label: "Commission", icon: "💰" },
+        { id: "admin-products", label: "Product Master", icon: "📦" },
+        { id: "admin-vehicles", label: "Vehicle Master", icon: "🚛" },
+        { id: "admin-employees", label: "Employee Master", icon: "👤" },
+        { id: "admin-users", label: "Users", icon: "👥" },
+      ]
+    }
+  ];
+
+  const DRAWER_GROUPS_USER = [
+    {
+      title: "Core Operations",
+      items: [
+        { id: "entry", label: "Daily Entry", icon: "📋" },
+        { id: "history", label: "History", icon: "📅" },
+      ]
+    },
+    {
+      title: "Reports & Analytics",
+      items: [
+        { id: "reports", label: "All Reports", icon: "📊" },
+        { id: "credits", label: "Pending Credits", icon: "💳" },
+      ]
+    }
+  ];
+
   const TABS = authedRole === "admin" ? TABS_ADMIN : TABS_USER;
+  const drawerGroups = authedRole === "admin" ? DRAWER_GROUPS_ADMIN : DRAWER_GROUPS_USER;
   const calcs = calcEntry(entry);
   // After any connection event the day's cash and stock change — reload the
   // working entry's date so Daily Entry / History reflect it immediately.
@@ -343,6 +392,14 @@ export default function App() {
       {/* Header */}
       <header className="hdr">
         <div className="hdr-brand">
+          <button
+            type="button"
+            className="hdr-menu-btn"
+            onClick={() => setMobileDrawerOpen(true)}
+            aria-label="Open Navigation Menu"
+          >
+            ☰
+          </button>
           <div className="hdr-logo-box">
             <img
               src="/bpcl_logo.png"
@@ -355,8 +412,8 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* Live system status */}
+        {/* Desktop Badges */}
+        <div className="hdr-badges-desktop">
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -407,9 +464,42 @@ export default function App() {
             LOGOUT
           </button>
         </div>
+
+        {/* Mobile Header Right Actions */}
+        <div className="hdr-mobile-actions">
+          <span style={{
+            background: "rgba(255, 255, 255, 0.12)",
+            border: "1px solid rgba(255, 255, 255, 0.18)",
+            padding: "3px 8px",
+            borderRadius: 12,
+            fontSize: 10.5,
+            fontWeight: 700,
+            color: "#fdba74",
+            textTransform: "uppercase"
+          }}>
+            {authedRole}
+          </span>
+          <button
+            type="button"
+            className="btn-ghost"
+            style={{
+              borderColor: "rgba(255, 255, 255, 0.2)",
+              color: "#fca5a5",
+              background: "rgba(239, 68, 68, 0.15)",
+              padding: "4px 8px",
+              fontSize: 11,
+              borderRadius: 8,
+              minHeight: 32
+            }}
+            onClick={handleLogout}
+            title="Logout"
+          >
+            Logout
+          </button>
+        </div>
       </header>
 
-      {/* Nav */}
+      {/* Horizontal Desktop/Tablet Nav Bar */}
       <div className="nav-wrapper">
         <button
           type="button"
@@ -436,55 +526,233 @@ export default function App() {
         </button>
       </div>
 
-      <main className="main">
-        {/* User Tabs */}
-        {tab === "entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} products={products} onConnectionsChanged={onConnectionsChanged} isAdmin={false} />}
-        {tab === "history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("entry"); }} products={products} />}
-        {tab === "credits" && <PendingCredits pending={pending} onRecord={recordPayment} products={products} />}
-        {(tab === "reports" || tab === "connections" || tab === "summary" || tab === "salary") && (
-          <AllReportsTab
-            isAdmin={false}
-            initialSub={tab === "summary" ? "summary" : tab === "salary" ? "salary" : "conn-register"}
-            entries={entries}
-            employees={employees}
-            products={products}
-            onChanged={onConnectionsChanged}
-            prices={prices}
-            onNavigate={(targetTab, targetDate) => {
-              if (targetDate) handleDateChange(targetDate);
-              setTab(targetTab);
-            }}
-          />
-        )}
+      {/* Mobile Navigation Drawer with motion/react */}
+      <AnimatePresence>
+        {mobileDrawerOpen && (
+          <>
+            <motion.div
+              className="drawer-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMobileDrawerOpen(false)}
+            />
+            <motion.aside
+              className="drawer-panel"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              aria-label="Mobile Navigation Drawer"
+            >
+              <div className="drawer-header">
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div className="hdr-logo-box" style={{ height: 36, width: 36 }}>
+                    <img src="/bpcl_logo.png" alt="Bharat Gas" />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 14, fontWeight: 700, color: "#fff" }}>
+                      JAY RANCHHOD GAS
+                    </div>
+                    <div style={{ fontSize: 10, color: "#fdba74", fontWeight: 700, textTransform: "uppercase" }}>
+                      {authedRole} Portal
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="drawer-close-btn"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  aria-label="Close menu"
+                >
+                  ✕
+                </button>
+              </div>
 
-        {/* Admin Tabs */}
-        {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} onConnectionsChanged={onConnectionsChanged} />}
-        {tab === "admin-history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("admin-entry"); }} isAdmin={true} onDelete={handleDeleteEntry} products={products} />}
-        {tab === "admin-dashboard" && <AdminDashboard entries={entries} pending={pending} prices={prices} commissions={commissions} products={products} onViewDay={(e) => { setEntry(e); setTab("admin-entry"); }} />}
-        {(tab === "admin-reports" || tab === "admin-connections" || tab === "admin-salary" || tab === "admin-all-reports") && (
-          <AllReportsTab
-            isAdmin={true}
-            initialSub={tab === "admin-connections" ? "conn-register" : tab === "admin-salary" ? "salary" : "day-reports"}
-            entries={entries}
-            commissions={commissions}
-            employees={employees}
-            products={products}
-            onChanged={onConnectionsChanged}
-            prices={prices}
-            onNavigate={(targetTab, targetDate) => {
-              if (targetDate) handleDateChange(targetDate);
-              setTab(targetTab);
-            }}
-          />
+              <div className="drawer-content">
+                {drawerGroups.map((grp, gIdx) => (
+                  <div key={gIdx} style={{ marginBottom: 14 }}>
+                    <div className="drawer-section-lbl">{grp.title}</div>
+                    {grp.items.map((item) => {
+                      const isActive = tab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`drawer-nav-item${isActive ? " active" : ""}`}
+                          onClick={() => {
+                            setTab(item.id);
+                            setMobileDrawerOpen(false);
+                          }}
+                        >
+                          <span style={{ fontSize: 16 }}>{item.icon}</span>
+                          <span style={{ flex: 1 }}>{item.label}</span>
+                          {isActive && <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.accent }}></span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+
+              <div className="drawer-footer">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, color: T.inkLight }}>
+                  <span>📅 {fmtDate(todayStr())}</span>
+                  <span style={{ color: T.success, fontWeight: 700 }}>● Active</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn-danger"
+                  style={{ width: "100%", padding: 10, fontSize: 12, fontWeight: 700 }}
+                  onClick={() => {
+                    setMobileDrawerOpen(false);
+                    handleLogout();
+                  }}
+                >
+                  🚪 Logout ({authedRole})
+                </button>
+              </div>
+            </motion.aside>
+          </>
         )}
-        {tab === "admin-prices" && <AdminPriceHistory prices={prices} setPrices={setPrices} products={products} />}
-        {tab === "admin-comm" && <AdminCommission commissions={commissions} setCommissions={setCommissions} products={products} />}
-        {tab === "admin-products" && <AdminProductMaster products={products} onProductsChanged={() => loadData(entry.date)} />}
-        {tab === "admin-credits" && <AdminCreditOverview pending={pending} products={products} />}
-        {tab === "admin-users" && <AdminUsers />}
-        {tab === "admin-vehicles" && <AdminVehicleMaster />}
-        {tab === "admin-employees" && <AdminEmployeeMaster />}
+      </AnimatePresence>
+
+      {/* Main Container with Tab Transitions */}
+      <main className="main">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            {/* User Tabs */}
+            {tab === "entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} products={products} onConnectionsChanged={onConnectionsChanged} isAdmin={false} />}
+            {tab === "history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("entry"); }} products={products} />}
+            {tab === "credits" && <PendingCredits pending={pending} onRecord={recordPayment} products={products} />}
+            {(tab === "reports" || tab === "connections" || tab === "summary" || tab === "salary") && (
+              <AllReportsTab
+                isAdmin={false}
+                initialSub={tab === "summary" ? "summary" : tab === "salary" ? "salary" : "conn-register"}
+                entries={entries}
+                employees={employees}
+                products={products}
+                onChanged={onConnectionsChanged}
+                prices={prices}
+                onNavigate={(targetTab, targetDate) => {
+                  if (targetDate) handleDateChange(targetDate);
+                  setTab(targetTab);
+                }}
+              />
+            )}
+
+            {/* Admin Tabs */}
+            {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} onConnectionsChanged={onConnectionsChanged} />}
+            {tab === "admin-history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("admin-entry"); }} isAdmin={true} onDelete={handleDeleteEntry} products={products} />}
+            {tab === "admin-dashboard" && <AdminDashboard entries={entries} pending={pending} prices={prices} commissions={commissions} products={products} onViewDay={(e) => { setEntry(e); setTab("admin-entry"); }} />}
+            {(tab === "admin-reports" || tab === "admin-connections" || tab === "admin-salary" || tab === "admin-all-reports") && (
+              <AllReportsTab
+                isAdmin={true}
+                initialSub={tab === "admin-connections" ? "conn-register" : tab === "admin-salary" ? "salary" : "day-reports"}
+                entries={entries}
+                commissions={commissions}
+                employees={employees}
+                products={products}
+                onChanged={onConnectionsChanged}
+                prices={prices}
+                onNavigate={(targetTab, targetDate) => {
+                  if (targetDate) handleDateChange(targetDate);
+                  setTab(targetTab);
+                }}
+              />
+            )}
+            {tab === "admin-prices" && <AdminPriceHistory prices={prices} setPrices={setPrices} products={products} />}
+            {tab === "admin-comm" && <AdminCommission commissions={commissions} setCommissions={setCommissions} products={products} />}
+            {tab === "admin-products" && <AdminProductMaster products={products} onProductsChanged={() => loadData(entry.date)} />}
+            {tab === "admin-credits" && <AdminCreditOverview pending={pending} products={products} />}
+            {tab === "admin-users" && <AdminUsers />}
+            {tab === "admin-vehicles" && <AdminVehicleMaster />}
+            {tab === "admin-employees" && <AdminEmployeeMaster />}
+          </motion.div>
+        </AnimatePresence>
       </main>
+
+      {/* Mobile Quick Bottom Navigation Bar */}
+      <nav className="mobile-bottom-bar" aria-label="Mobile Quick Navigation">
+        {authedRole === "admin" ? (
+          <>
+            <button
+              type="button"
+              className={`bottom-nav-item${tab === "admin-dashboard" ? " active" : ""}`}
+              onClick={() => setTab("admin-dashboard")}
+            >
+              <span style={{ fontSize: 18 }}>⬛</span>
+              <span>Dashboard</span>
+            </button>
+            <button
+              type="button"
+              className={`bottom-nav-item${tab === "admin-entry" ? " active" : ""}`}
+              onClick={() => setTab("admin-entry")}
+            >
+              <span style={{ fontSize: 18 }}>📋</span>
+              <span>Daily Entry</span>
+            </button>
+            <button
+              type="button"
+              className={`bottom-nav-item${tab === "admin-reports" ? " active" : ""}`}
+              onClick={() => setTab("admin-reports")}
+            >
+              <span style={{ fontSize: 18 }}>📊</span>
+              <span>Reports</span>
+            </button>
+            <button
+              type="button"
+              className={`bottom-nav-item${mobileDrawerOpen ? " active" : ""}`}
+              onClick={() => setMobileDrawerOpen(true)}
+            >
+              <span style={{ fontSize: 18 }}>☰</span>
+              <span>All Menu</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={`bottom-nav-item${tab === "entry" ? " active" : ""}`}
+              onClick={() => setTab("entry")}
+            >
+              <span style={{ fontSize: 18 }}>📋</span>
+              <span>Daily Entry</span>
+            </button>
+            <button
+              type="button"
+              className={`bottom-nav-item${tab === "history" ? " active" : ""}`}
+              onClick={() => setTab("history")}
+            >
+              <span style={{ fontSize: 18 }}>📅</span>
+              <span>History</span>
+            </button>
+            <button
+              type="button"
+              className={`bottom-nav-item${tab === "reports" ? " active" : ""}`}
+              onClick={() => setTab("reports")}
+            >
+              <span style={{ fontSize: 18 }}>📊</span>
+              <span>Reports</span>
+            </button>
+            <button
+              type="button"
+              className={`bottom-nav-item${mobileDrawerOpen ? " active" : ""}`}
+              onClick={() => setMobileDrawerOpen(true)}
+            >
+              <span style={{ fontSize: 18 }}>☰</span>
+              <span>All Menu</span>
+            </button>
+          </>
+        )}
+      </nav>
     </div>
   );
 }
