@@ -1487,9 +1487,13 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
 
 export function History({ entries, onEdit, isAdmin, onDelete, products = PRODUCTS }) {
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+  const cylinderProducts = useMemo(() => {
+    const list = (products || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
+    return list.length > 0 ? list : PRODUCTS;
+  }, [products]);
   // Running empty-cylinder balance for every date, computed once for the whole
   // table instead of replaying history inside each row.
-  const emptySeries = useMemo(() => computeEmptyBalanceSeries(entries, products), [entries, products]);
+  const emptySeries = useMemo(() => computeEmptyBalanceSeries(entries, cylinderProducts), [entries, cylinderProducts]);
 
   const handleDelete = async (e, date) => {
     e.stopPropagation(); // prevent row click triggering edit
@@ -1589,6 +1593,7 @@ export function History({ entries, onEdit, isAdmin, onDelete, products = PRODUCT
                     <td style={{ fontSize: 11, lineHeight: 1.2, whiteSpace: "nowrap", border: `1px solid ${T.border}` }}>
                       {(e.godownStock || []).map((item) => {
                         const p = (products || PRODUCTS).find(prod => prod.id === item.productId);
+                        if (p && p.category === 'accessory') return null;
                         return (
                           <div key={item.productId} style={{ marginBottom: 2 }}>
                             <span style={{ fontWeight: 600, color: T.inkMid }}>{p ? (p.short || p.label) : item.productId}:</span>
@@ -1600,7 +1605,7 @@ export function History({ entries, onEdit, isAdmin, onDelete, products = PRODUCT
                       })}
                     </td>
                     <td style={{ fontSize: 11, lineHeight: 1.2, whiteSpace: "nowrap", border: `1px solid ${T.border}` }}>
-                      {(products || PRODUCTS).map((p) => {
+                      {cylinderProducts.map((p) => {
                         const prod = (e.products || []).find(x => x.id === p.id) || {};
                         // Same shared stock engine as the Daily Entry screen, so the
                         // History column can never disagree with the entry screen.
@@ -1610,7 +1615,7 @@ export function History({ entries, onEdit, isAdmin, onDelete, products = PRODUCT
                         const totalEmpty = (emptySeries[e.date] || {})[p.id] || 0;
                         return (
                           <div key={p.id} style={{ marginBottom: 2 }}>
-                            <span style={{ fontWeight: 600, color: T.inkMid }}>{p.short}:</span>
+                            <span style={{ fontWeight: 600, color: T.inkMid }}>{p.short || p.label}:</span>
                             <span style={{ color: T.success, marginLeft: 4 }}>{totalFull}</span>
                             <span style={{ color: T.inkLight }}>/</span>
                             <span style={{ color: T.danger }}>{totalEmpty}</span>
