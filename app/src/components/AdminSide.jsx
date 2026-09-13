@@ -11,69 +11,127 @@ import SharedSalaryReport from "./SharedSalaryReport";
 
 export { AdminProductMaster, SharedSalaryReport };
 
+// Helper to calculate start and end of any month in local time (YYYY-MM-DD)
+const getMonthBounds = (dateObj = new Date()) => {
+  const y = dateObj.getFullYear();
+  const m = dateObj.getMonth();
+  const p = (n) => String(n).padStart(2, "0");
+  const start = `${y}-${p(m + 1)}-01`;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  const end = `${y}-${p(m + 1)}-${p(lastDay)}`;
+  return { start, end };
+};
+
 export function AdminDashboard({ entries = [], pending = [], prices = [], commissions = [], products = PRODUCTS, onViewDay }) {
-  const currentMonthStr = todayStr().slice(0, 7); // e.g. "2026-09"
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+  // Default range is the current month Start & End date range
+  const currentMonthRange = getMonthBounds(new Date());
+  const [fromDate, setFromDate] = useState(currentMonthRange.start);
+  const [toDate, setToDate] = useState(currentMonthRange.end);
 
-  const [selYear, selMonthNum] = selectedMonth.split("-").map(Number);
+  // Quick preset setters
+  const setThisMonth = () => {
+    const r = getMonthBounds(new Date());
+    setFromDate(r.start);
+    setToDate(r.end);
+  };
 
-  // Month navigation helpers
+  const setToday = () => {
+    const t = todayStr();
+    setFromDate(t);
+    setToDate(t);
+  };
+
+  const setLastMonth = () => {
+    const now = new Date();
+    const r = getMonthBounds(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    setFromDate(r.start);
+    setToDate(r.end);
+  };
+
+  // Month navigation: shift full month relative to current fromDate
   const handlePrevMonth = () => {
-    const d = new Date(selYear, selMonthNum - 2, 1);
-    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const refDate = fromDate ? new Date(fromDate + "T00:00:00") : new Date();
+    const r = getMonthBounds(new Date(refDate.getFullYear(), refDate.getMonth() - 1, 1));
+    setFromDate(r.start);
+    setToDate(r.end);
   };
 
   const handleNextMonth = () => {
-    const d = new Date(selYear, selMonthNum, 1);
-    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const refDate = fromDate ? new Date(fromDate + "T00:00:00") : new Date();
+    const r = getMonthBounds(new Date(refDate.getFullYear(), refDate.getMonth() + 1, 1));
+    setFromDate(r.start);
+    setToDate(r.end);
   };
 
-  const handleMonthChange = (mNum) => {
-    setSelectedMonth(`${selYear}-${String(mNum).padStart(2, "0")}`);
+  const handleFromChange = (newVal) => {
+    setFromDate(newVal);
+    if (toDate && newVal && newVal > toDate) {
+      setToDate(newVal);
+    }
   };
 
-  const handleYearChange = (yNum) => {
-    setSelectedMonth(`${yNum}-${String(selMonthNum).padStart(2, "0")}`);
+  const handleToChange = (newVal) => {
+    setToDate(newVal);
+    if (fromDate && newVal && newVal < fromDate) {
+      setFromDate(newVal);
+    }
   };
 
-  // Generate Year options (current year +- 3 years, and any years from entries)
-  const entryYears = (entries || []).map(e => parseInt(e.date?.slice(0, 4))).filter(Boolean);
-  const thisYear = new Date().getFullYear();
-  const minYear = Math.min(thisYear - 2, ...entryYears, 2024);
-  const maxYear = Math.max(thisYear + 2, ...entryYears, 2028);
-  const yearOptions = [];
-  for (let y = minYear; y <= maxYear; y++) yearOptions.push(y);
+  // Check preset matches
+  const isThisMonth = fromDate === currentMonthRange.start && toDate === currentMonthRange.end;
+  const isToday = fromDate === todayStr() && toDate === todayStr();
+  const lastMonthRange = getMonthBounds(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
+  const isLastMonth = fromDate === lastMonthRange.start && toDate === lastMonthRange.end;
 
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
+  // Formatted display label for selected range
+  const isSingleDay = fromDate && toDate && fromDate === toDate;
+  const rangeLabel = !fromDate && !toDate
+    ? "All Time"
+    : isSingleDay
+    ? fmtDate(fromDate)
+    : `${fromDate ? fmtDate(fromDate) : "Start"} – ${toDate ? fmtDate(toDate) : "End"}`;
 
-  // Filter entries for the selected month
-  const monthEntries = (entries || [])
-    .filter(e => e.date && e.date.startsWith(selectedMonth))
+  // Filter entries for the selected date range
+  const rangeEntries = (entries || [])
+    .filter(e => {
+      if (!e.date) return false;
+      if (fromDate && e.date < fromDate) return false;
+      if (toDate && e.date > toDate) return false;
+      return true;
+    })
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  // Previous month entries for comparison
-  const prevDate = new Date(selYear, selMonthNum - 2, 1);
-  const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
-  const prevMonthEntries = (entries || []).filter(e => e.date && e.date.startsWith(prevMonthStr));
-
-  // Calculations for selected month
-  const mCylSales = monthEntries.reduce((s, e) => s + calcEntry(e).totalSales, 0);
-  const mAccSales = monthEntries.reduce((s, e) => s + calcEntry(e).totalAccessorySales, 0);
+  // Calculations for selected date range
+  const mCylSales = rangeEntries.reduce((s, e) => s + calcEntry(e).totalSales, 0);
+  const mAccSales = rangeEntries.reduce((s, e) => s + calcEntry(e).totalAccessorySales, 0);
   const mGrossSales = mCylSales + mAccSales;
 
-  const lmGrossSales = prevMonthEntries.reduce((s, e) => s + calcEntry(e).totalSales + calcEntry(e).totalAccessorySales, 0);
-  const deltaSales = lmGrossSales > 0 ? (((mGrossSales - lmGrossSales) / lmGrossSales) * 100).toFixed(1) : null;
+  // Comparison with prior period of equal duration
+  let deltaSales = null;
+  if (fromDate && toDate) {
+    const fTime = new Date(fromDate + "T00:00:00").getTime();
+    const tTime = new Date(toDate + "T00:00:00").getTime();
+    const daySpan = Math.max(1, Math.round((tTime - fTime) / (1000 * 60 * 60 * 24)) + 1);
+
+    const prevTo = new Date(fTime - 24 * 60 * 60 * 1000);
+    const prevFrom = new Date(prevTo.getTime() - (daySpan - 1) * 24 * 60 * 60 * 1000);
+    const pToStr = `${prevTo.getFullYear()}-${String(prevTo.getMonth() + 1).padStart(2, "0")}-${String(prevTo.getDate()).padStart(2, "0")}`;
+    const pFromStr = `${prevFrom.getFullYear()}-${String(prevFrom.getMonth() + 1).padStart(2, "0")}-${String(prevFrom.getDate()).padStart(2, "0")}`;
+
+    const prevEntries = (entries || []).filter(e => e.date && e.date >= pFromStr && e.date <= pToStr);
+    const prevGross = prevEntries.reduce((s, e) => s + calcEntry(e).totalSales + calcEntry(e).totalAccessorySales, 0);
+    if (prevGross > 0) {
+      deltaSales = (((mGrossSales - prevGross) / prevGross) * 100).toFixed(1);
+    }
+  }
 
   // Cylinders sold
-  const mCylinders = monthEntries.reduce((s, e) => {
+  const mCylinders = rangeEntries.reduce((s, e) => {
     return s + (e.products || []).reduce((ps, p) => ps + num(p.sell) + num(p.online), 0);
   }, 0);
 
   // Agency Commission earned on cylinder sales
-  const mCommission = monthEntries.reduce((s, e) => {
+  const mCommission = rangeEntries.reduce((s, e) => {
     return s + (e.products || []).reduce((ps, p) => ps + (num(p.sell) + num(p.online)) * getCommRate(p.id, commissions, e.date), 0);
   }, 0);
 
@@ -81,9 +139,9 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
   const mAgencyEarnings = mCommission + mAccSales;
 
   // Expenses breakdown
-  const mGeneralExpenses = monthEntries.reduce((s, e) => s + calcEntry(e).totalExpenses, 0);
-  const mVehicleExpenses = monthEntries.reduce((s, e) => s + calcEntry(e).totalVehicleExp, 0);
-  const mSalaryExpenses  = monthEntries.reduce((s, e) => s + calcEntry(e).totalSalaryPayments, 0);
+  const mGeneralExpenses = rangeEntries.reduce((s, e) => s + calcEntry(e).totalExpenses, 0);
+  const mVehicleExpenses = rangeEntries.reduce((s, e) => s + calcEntry(e).totalVehicleExp, 0);
+  const mSalaryExpenses  = rangeEntries.reduce((s, e) => s + calcEntry(e).totalSalaryPayments, 0);
   const mTotalExpenses   = mGeneralExpenses + mVehicleExpenses + mSalaryExpenses;
 
   // Real Profit = (Agency Commission + Accessory Sales) - Total Operating Expenses
@@ -92,8 +150,8 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
   // Outstanding credit (all-time pending)
   const outstanding = (pending || []).filter(p => !p.cleared).reduce((s, p) => s + (num(p.originalAmt) - num(p.recovered)), 0);
 
-  // Connections in month
-  const mConn = monthEntries.reduce((acc, e) => {
+  // Connections in range
+  const mConn = rangeEntries.reduce((acc, e) => {
     const c = calcEntry(e);
     acc.cash += c.totalConnectionPaymentsCash;
     acc.online += c.totalConnectionPaymentsOnline;
@@ -104,7 +162,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
   // Product snapshot breakdown
   const productBreakdown = (products || PRODUCTS).map((p) => {
     const isAcc = p.category === 'accessory';
-    const qty = monthEntries.reduce((s, e) => {
+    const qty = rangeEntries.reduce((s, e) => {
       if (isAcc) {
         const accRow = (e.accessories || []).find(x => x.accessoryId === p.id);
         return s + (accRow && accRow.sold ? num(accRow.qty) : 0);
@@ -114,7 +172,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
       }
     }, 0);
 
-    const revenue = monthEntries.reduce((s, e) => {
+    const revenue = rangeEntries.reduce((s, e) => {
       if (isAcc) {
         const accRow = (e.accessories || []).find(x => x.accessoryId === p.id);
         return s + (accRow && accRow.sold ? num(accRow.qty) * num(accRow.rate) : 0);
@@ -127,7 +185,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
     }, 0);
 
     const commRate = isAcc ? 0 : getCommRate(p.id, commissions);
-    const commTotal = isAcc ? 0 : monthEntries.reduce((s, e) => {
+    const commTotal = isAcc ? 0 : rangeEntries.reduce((s, e) => {
       const prodRow = (e.products || []).find(x => x.id === p.id);
       return s + (num(prodRow?.sell) + num(prodRow?.online)) * getCommRate(p.id, commissions, e.date);
     }, 0);
@@ -145,71 +203,99 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
 
   return (
     <div className="fade-in">
-      {/* Month & Year Selection Toolbar */}
+      {/* Date Range Selection Toolbar */}
       <div className="card" style={{ marginBottom: 18, padding: "14px 20px", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 14, background: "#ffffff", border: `1px solid ${T.border}`, borderRadius: 14, boxShadow: T.shadowSm }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{
-            width: 40,
-            height: 40,
+            width: 42,
+            height: 42,
             borderRadius: 10,
             background: "rgba(37, 99, 235, 0.08)",
             border: "1px solid rgba(37, 99, 235, 0.15)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 20
+            fontSize: 22,
+            flexShrink: 0
           }}>
             📅
           </div>
           <div>
-            <div style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 18, color: T.ink, display: "flex", alignItems: "center", gap: 8 }}>
-              {monthNames[selMonthNum - 1]} {selYear}
-              {selectedMonth === currentMonthStr && <span className="badge badge-success" style={{ fontSize: 10, padding: "2px 8px" }}>Current Month</span>}
+            <div style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: 18, color: T.ink, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>{rangeLabel}</span>
+              {isThisMonth && <span className="badge badge-success" style={{ fontSize: 11, padding: "2px 8px" }}>Current Month</span>}
+              {isToday && <span className="badge badge-primary" style={{ fontSize: 11, padding: "2px 8px" }}>Today</span>}
+              {isLastMonth && <span className="badge badge-ink" style={{ fontSize: 11, padding: "2px 8px" }}>Last Month</span>}
             </div>
-            <div style={{ fontSize: 12, color: T.inkLight, marginTop: 2 }}>{monthEntries.length} daily entries recorded</div>
+            <div style={{ fontSize: 12, color: T.inkLight, marginTop: 2 }}>
+              {rangeEntries.length} daily {rangeEntries.length === 1 ? "entry" : "entries"} recorded
+            </div>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn-ghost" onClick={handlePrevMonth} title="Previous Month" style={{ padding: "7px 14px", fontWeight: 700 }}>
-            ◀ Prev
-          </button>
-          
-          <select 
-            className="inp" 
-            value={selMonthNum} 
-            onChange={(e) => handleMonthChange(Number(e.target.value))}
-            style={{ width: 140, fontWeight: 600, padding: "7px 12px" }}
-          >
-            {monthNames.map((name, idx) => (
-              <option key={idx + 1} value={idx + 1}>{name}</option>
-            ))}
-          </select>
+        {/* Date Range Inputs & Presets */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.inkMid }}>From:</span>
+            <input
+              type="date"
+              className="inp"
+              value={fromDate}
+              onChange={(e) => handleFromChange(e.target.value)}
+              style={{ width: 135, fontWeight: 600, padding: "6px 8px", fontSize: 13 }}
+            />
+          </div>
 
-          <select 
-            className="inp" 
-            value={selYear} 
-            onChange={(e) => handleYearChange(Number(e.target.value))}
-            style={{ width: 90, fontWeight: 600, padding: "7px 12px" }}
-          >
-            {yearOptions.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.inkMid }}>To:</span>
+            <input
+              type="date"
+              className="inp"
+              value={toDate}
+              onChange={(e) => handleToChange(e.target.value)}
+              style={{ width: 135, fontWeight: 600, padding: "6px 8px", fontSize: 13 }}
+            />
+          </div>
 
-          <button className="btn-ghost" onClick={handleNextMonth} title="Next Month" style={{ padding: "7px 14px", fontWeight: 700 }}>
-            Next ▶
-          </button>
-
-          {selectedMonth !== currentMonthStr && (
-            <button 
-              className="btn-ghost" 
-              onClick={() => setSelectedMonth(currentMonthStr)} 
-              style={{ borderColor: T.blue, color: T.blue, fontWeight: 700, padding: "7px 14px" }}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <button
+              className={isThisMonth ? "btn" : "btn-ghost"}
+              onClick={setThisMonth}
+              style={{ padding: "6px 12px", fontWeight: 700, fontSize: 12 }}
             >
-              Current Month
+              This Month
             </button>
-          )}
+            <button
+              className={isToday ? "btn" : "btn-ghost"}
+              onClick={setToday}
+              style={{ padding: "6px 12px", fontWeight: 700, fontSize: 12 }}
+            >
+              Today
+            </button>
+            <button
+              className={isLastMonth ? "btn" : "btn-ghost"}
+              onClick={setLastMonth}
+              style={{ padding: "6px 12px", fontWeight: 700, fontSize: 12 }}
+            >
+              Last Month
+            </button>
+            <button
+              className="btn-ghost"
+              onClick={handlePrevMonth}
+              title="Previous Month"
+              style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}
+            >
+              ◀ Prev
+            </button>
+            <button
+              className="btn-ghost"
+              onClick={handleNextMonth}
+              title="Next Month"
+              style={{ padding: "6px 10px", fontWeight: 700, fontSize: 12 }}
+            >
+              Next ▶
+            </button>
+          </div>
         </div>
       </div>
 
@@ -224,7 +310,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
           </div>
           {deltaSales && (
             <div className="stat-delta" style={{ color: num(deltaSales) >= 0 ? T.success : T.danger, marginTop: 4 }}>
-              {num(deltaSales) >= 0 ? "▲" : "▼"} {Math.abs(deltaSales)}% vs prev month
+              {num(deltaSales) >= 0 ? "▲" : "▼"} {Math.abs(deltaSales)}% vs prior period
             </div>
           )}
         </div>
@@ -233,7 +319,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         <div className="stat-card" style={{ "--kpi-color": "#0ea5e9" }}>
           <div className="stat-val" style={{ color: "#0ea5e9" }}>{mCylinders}</div>
           <div className="stat-lbl">Cylinders Sold</div>
-          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>In {monthNames[selMonthNum - 1]} {selYear}</div>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>In selected range</div>
         </div>
 
         {/* Total Operating Expenses */}
@@ -283,7 +369,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         <div className="card">
           <div className="card-head">
             <span className="card-head-title">📊 Profit & Loss (P&L) Summary</span>
-            <span className="badge badge-ink">{monthNames[selMonthNum - 1]} {selYear}</span>
+            <span className="badge badge-ink">{rangeLabel}</span>
           </div>
           <div className="card-body" style={{ padding: "10px 16px" }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.inkLight, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
@@ -335,7 +421,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
             }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: mRealProfit >= 0 ? "#047857" : "#b91c1c", letterSpacing: 0.5 }}>
-                  REAL NET PROFIT ({monthNames[selMonthNum - 1]} {selYear})
+                  REAL NET PROFIT ({rangeLabel})
                 </div>
                 <div style={{ fontSize: 10, color: T.inkLight }}>Gross Earnings − Total Expenses</div>
               </div>
@@ -350,7 +436,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         <div className="card">
           <div className="card-head">
             <span className="card-head-title">📦 Product & Accessory Snapshot</span>
-            <span className="badge badge-ink">{monthNames[selMonthNum - 1]} {selYear}</span>
+            <span className="badge badge-ink">{rangeLabel}</span>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table className="tbl">
@@ -384,11 +470,11 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         </div>
       </div>
 
-      {/* Month's Daily Entries Table */}
+      {/* Daily Entries Table in Date Range */}
       <div className="card">
         <div className="card-head">
-          <span className="card-head-title">📅 Daily Entries in {monthNames[selMonthNum - 1]} {selYear}</span>
-          <span style={{ fontSize: 12, color: T.inkLight }}>{monthEntries.length} entries recorded</span>
+          <span className="card-head-title">📅 Daily Entries ({rangeLabel})</span>
+          <span style={{ fontSize: 12, color: T.inkLight }}>{rangeEntries.length} entries recorded</span>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="tbl">
@@ -406,14 +492,14 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
               </tr>
             </thead>
             <tbody>
-              {monthEntries.length === 0 ? (
+              {rangeEntries.length === 0 ? (
                 <tr>
                   <td colSpan={onViewDay ? 9 : 8} style={{ textAlign: "center", padding: "24px 12px", color: T.inkLight }}>
-                    No daily entries recorded for {monthNames[selMonthNum - 1]} {selYear}.
+                    No daily entries recorded between {fmtDate(fromDate)} and {fmtDate(toDate)}.
                   </td>
                 </tr>
               ) : (
-                monthEntries.map(e => {
+                rangeEntries.map(e => {
                   const c = calcEntry(e);
                   const cyl = (e.products || []).reduce((s, p) => s + num(p.sell) + num(p.online), 0);
                   const dayComm = (e.products || []).reduce((ps, p) => ps + (num(p.sell) + num(p.online)) * getCommRate(p.id, commissions, e.date), 0);
