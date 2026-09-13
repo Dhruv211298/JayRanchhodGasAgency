@@ -1001,25 +1001,18 @@ input[type=number] {
     display: none;
   }
 
-  /* Navigation */
-  .nav-scroll-btn {
-    display: none;
+  /* Hide redundant horizontal nav bar and bottom bar in mobile view since side drawer exists */
+  .nav-wrapper {
+    display: none !important;
   }
-  .nav-btn {
-    padding: 0 14px;
-    height: 44px;
-    font-size: 11.5px;
-  }
-
-  /* Mobile Bottom Bar active */
   .mobile-bottom-bar {
-    display: flex;
+    display: none !important;
   }
 
   /* Main container */
   .main {
     padding: 12px;
-    padding-bottom: 96px; /* Extra padding so bottom bar does not obscure inputs/buttons */
+    padding-bottom: 24px;
   }
 
   /* Cards */
@@ -1124,7 +1117,7 @@ input[type=number] {
   }
   .main {
     padding: 8px;
-    padding-bottom: 96px;
+    padding-bottom: 24px;
   }
   .stat-card {
     min-width: 100%;
