@@ -84,9 +84,9 @@ export function EffectBox({ children, danger }) {
   return <div style={{ fontSize: 12, color: danger ? T.danger : T.inkMid, background: danger ? T.dangerBg : T.cardAlt, borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>{children}</div>;
 }
 
-/* ── Form 1: New connection — stock only ── */
+/* ── Form 1: New connection — stock + optional cash / online payment ── */
 export function NewConnectionForm({ isAdmin, onDone, defaultDate, lockDate = false, products = PRODUCTS }) {
-  const blank = () => ({ productId: "p14", connectionType: "single", qty: "1", remarks: "", date: defaultDate || todayStr() });
+  const blank = () => ({ productId: "p14", connectionType: "single", qty: "1", amount: "", paymentMode: "", remarks: "", date: defaultDate || todayStr() });
   const [f, setF] = useState(blank());
   const [busy, setBusy] = useState(false);
 
@@ -97,20 +97,49 @@ export function NewConnectionForm({ isAdmin, onDone, defaultDate, lockDate = fal
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const qty = num(f.qty);
   const cyl = qty * (f.connectionType === "double" ? 2 : 1);
+  const amountOk = f.amount !== "" && Number.isFinite(Number(f.amount)) && num(f.amount) >= 0;
+
   const submit = async () => {
     if (!(Number.isInteger(qty) && qty >= 1)) return Swal.fire({ title: "Enter how many connections", icon: "warning", confirmButtonColor: "#0077ff" });
+    if (!amountOk) return Swal.fire({ title: "Amount is required", text: "Enter the amount collected (or 0 if none).", icon: "warning", confirmButtonColor: "#0077ff" });
+    if (num(f.amount) > 0 && f.paymentMode !== "cash" && f.paymentMode !== "online") {
+      return Swal.fire({ title: "Select payment mode", text: "Cash or Online — only cash enters cash-on-hand.", icon: "warning", confirmButtonColor: "#0077ff" });
+    }
     setBusy(true);
     try {
-      const r = await api.recordNewConnection({ date: f.date, productId: f.productId, connectionType: f.connectionType, qty, remarks: f.remarks });
+      const r = await api.recordNewConnection({
+        date: f.date,
+        productId: f.productId,
+        connectionType: f.connectionType,
+        qty,
+        amount: num(f.amount),
+        paymentMode: num(f.amount) > 0 ? f.paymentMode : (f.paymentMode || null),
+        remarks: f.remarks,
+      });
       if (r.duplicate) await swalDup();
-      else Swal.fire({ title: "Recorded", text: `${r.cylinders_out} filled ${productLabel(f.productId, products)} issued from stock. No cash entry — the deposit is in BPCL's system.`, icon: "success", confirmButtonColor: "#0077ff", timer: 3000, timerProgressBar: true });
+      else {
+        const cashMsg = num(r.amount) > 0
+          ? `<br/>${inr(r.amount)} recorded as <strong>${r.payment_mode === "cash" ? "cash — added to cash on hand" : "online — reported, not added to cash on hand"}</strong>.`
+          : '';
+        Swal.fire({
+          title: "Recorded",
+          html: `${r.cylinders_out} filled ${productLabel(f.productId, products)} issued from stock.${cashMsg}`,
+          icon: "success",
+          confirmButtonColor: "#0077ff",
+          timer: 3500,
+          timerProgressBar: true
+        });
+      }
       setF(blank()); onDone();
     } catch (e) { swalErr("Not recorded", e); }
     setBusy(false);
   };
   return (
     <div className="card" style={{ height: "100%" }}>
-      <div className="card-head"><span className="card-head-title">➕ New Connection</span><span className="badge badge-ink">stock only</span></div>
+      <div className="card-head">
+        <span className="card-head-title">➕ New Connection</span>
+        <span className="badge badge-success">cash / online IN</span>
+      </div>
       <div className="card-body">
         <div className="field"><label>Cylinder Category *</label><ProductSelect value={f.productId} onChange={v => set("productId", v)} products={products} /></div>
         <div className="g2">
@@ -122,10 +151,44 @@ export function NewConnectionForm({ isAdmin, onDone, defaultDate, lockDate = fal
           </div>
           <div className="field"><label>No. of Connections *</label><input className="inp" type="number" min="1" step="1" value={f.qty} onChange={e => set("qty", e.target.value)} /></div>
         </div>
+        <div className="g2">
+          <div className="field"><label>Amount Collected (₹) *</label>
+            <input className="inp" type="number" min="0" step="0.01" value={f.amount} onChange={e => set("amount", e.target.value)} placeholder="0 or amount collected" style={{ borderColor: f.amount !== "" && !amountOk ? T.danger : undefined }} />
+          </div>
+          <div className="field"><label>Payment Mode *</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[["cash", "💵 Cash"], ["online", "🏦 Online"]].map(([v, l]) => (
+                <button
+                  key={v}
+                  type="button"
+                  className="btn-ghost"
+                  style={{
+                    flex: 1,
+                    padding: "9px 6px",
+                    background: f.paymentMode === v ? (v === "cash" ? T.success : T.blue) : "transparent",
+                    color: f.paymentMode === v ? "#fff" : T.inkMid,
+                    borderColor: f.paymentMode === v ? (v === "cash" ? T.success : T.blue) : T.border
+                  }}
+                  onClick={() => set("paymentMode", v)}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
         <EventDateField value={f.date} onChange={v => set("date", v)} isAdmin={isAdmin} lockDate={lockDate} />
         <div className="field"><label>Remarks (optional)</label><input className="inp" type="text" value={f.remarks} onChange={e => set("remarks", e.target.value)} placeholder="Not required" /></div>
-        <EffectBox>Stock: <strong>−{cyl || 0} filled {productLabel(f.productId, products)}</strong> on {fmtDate(f.date)}. Cash: <strong>none</strong> (deposit recorded by BPCL).</EffectBox>
-        <button className="btn-primary" style={{ width: "100%" }} onClick={submit} disabled={busy}>{busy ? "Saving…" : "✅ Issue Cylinders"}</button>
+        <EffectBox>
+          Stock: <strong>−{cyl || 0} filled {productLabel(f.productId, products)}</strong> on {fmtDate(f.date)} · Cash on hand: <strong style={{ color: f.paymentMode === "cash" ? T.success : T.inkMid }}>
+            {num(f.amount) > 0
+              ? (f.paymentMode === "cash" ? `+${inr(f.amount)}` : f.paymentMode === "online" ? `unchanged (${inr(f.amount)} online, reported separately)` : "—")
+              : "none (deposit recorded by BPCL or ₹0 entered)"}
+          </strong>
+        </EffectBox>
+        <button className="btn-primary" style={{ width: "100%" }} onClick={submit} disabled={busy}>
+          {busy ? "Saving…" : num(f.amount) > 0 ? "✅ Record Payment & Issue" : "✅ Issue Cylinders"}
+        </button>
       </div>
     </div>
   );
@@ -316,7 +379,7 @@ function EventsTable({ events, isAdmin, onVoid }) {
           <tbody>
             {events.length === 0 && <tr><td colSpan={isAdmin ? 10 : 9} style={{ padding: 20, color: T.inkLight }}>No connection events in this range.</td></tr>}
             {events.map(e => {
-              const cashEffect = e.eventType === "additional" && e.mode === "cash" ? e.amount : e.eventType === "surrender" ? -e.netPaid : 0;
+              const cashEffect = (e.eventType === "additional" || e.eventType === "new") && e.mode === "cash" ? e.amount : e.eventType === "surrender" ? -e.netPaid : 0;
               return (
                 <tr key={e.id}>
                   <td style={{ whiteSpace: "nowrap" }}>{fmtDate(e.date)}</td>
@@ -331,9 +394,23 @@ function EventsTable({ events, isAdmin, onVoid }) {
                   <td style={{ fontSize: 12, textAlign: "left" }}>
                     {e.eventType === "additional" && <><span className={`badge ${e.mode === "cash" ? "badge-success" : "badge-blue"}`}>{e.mode}</span> {inr(e.amount)}</>}
                     {e.eventType === "surrender" && <>refund {inr(e.amount)}{e.penaltyDeducted > 0 && <span style={{ color: T.warn }}> − {inr(e.penaltyDeducted)} <span title={e.penalties.map(p => `${p.item}: ${inr(p.amount)}`).join("\n")} style={{ fontSize: 10 }}>({e.penalties.map(p => p.item).join(", ")})</span></span>}</>}
-                    {e.eventType === "new" && <span style={{ color: T.inkLight }}>— (BPCL deposit)</span>}
+                    {e.eventType === "new" && (
+                      num(e.amount) > 0 ? (
+                        <><span className={`badge ${e.mode === "cash" ? "badge-success" : "badge-blue"}`}>{e.mode}</span> {inr(e.amount)}</>
+                      ) : (
+                        <span style={{ color: T.inkLight }}>— (BPCL deposit)</span>
+                      )
+                    )}
                   </td>
-                  <td style={{ textAlign: "right", fontWeight: 700, color: cashEffect > 0 ? T.success : cashEffect < 0 ? T.danger : T.inkLight }}>{cashEffect === 0 ? (e.eventType === "additional" ? <span style={{ color: T.blue, fontSize: 11 }}>{inr(e.amount)} online</span> : "—") : (cashEffect > 0 ? "+" : "−") + inr(Math.abs(cashEffect))}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, color: cashEffect > 0 ? T.success : cashEffect < 0 ? T.danger : T.inkLight }}>
+                    {cashEffect === 0 ? (
+                      (e.eventType === "additional" || e.eventType === "new") && e.mode === "online" && num(e.amount) > 0 ? (
+                        <span style={{ color: T.blue, fontSize: 11 }}>{inr(e.amount)} online</span>
+                      ) : "—"
+                    ) : (
+                      (cashEffect > 0 ? "+" : "−") + inr(Math.abs(cashEffect))
+                    )}
+                  </td>
                   <td style={{ fontSize: 11, color: T.inkLight, maxWidth: 160 }}>{e.remarks || "—"}</td>
                   <td style={{ fontSize: 11 }}>{e.recordedBy}</td>
                   {isAdmin && <td><button className="btn-icon" title="Void this entry (audited)" onClick={() => onVoid(e)}>×</button></td>}

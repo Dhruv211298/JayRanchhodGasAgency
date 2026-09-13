@@ -621,7 +621,7 @@ app.get('/api/load', verifyToken, async (req, res) => {
     });
     const shapeConnNew = x => ({
       id: x.id, productId: x.productId, connectionType: x.connectionType, qty: num(x.qty), cylindersOut: num(x.cylindersOut),
-      remarks: x.remarks, recordedBy: x.recordedBy
+      amt: num(x.amount), mode: x.mode, remarks: x.remarks, recordedBy: x.recordedBy
     });
     /* Per-product cylinder movements for the stock engine (filled OUT for
        new + additional, empty IN for surrender). Missing cylinders are
@@ -2076,13 +2076,15 @@ async function recordEvent(req, res, { row, penalties, key, auditType }) {
   }
 }
 
-/* ── 9.1 New connection — stock only, NO money ─────────────────── */
+/* ── 9.1 New connection — stock + optional cash/online payment ── */
 app.post('/api/connection-events/new', verifyToken, async (req, res) => {
   const b = req.body || {};
   const date = b.date;
   const productId = cleanStr(b.productId, 50);
   const connectionType = cleanStr(b.connectionType, 10) || 'single';
   const qty = parseQty(b.qty, 1);
+  const amount = parseMoney(b.amount || 0);
+  const paymentMode = cleanStr(b.paymentMode, 10);
   const remarks = cleanStr(b.remarks, 255); // optional — never required
 
   const dp = eventDateProblem(req, date);
@@ -2090,11 +2092,14 @@ app.post('/api/connection-events/new', verifyToken, async (req, res) => {
   if (!productId) return res.status(400).json({ error: 'Cylinder category (product) is required.' });
   if (!CONNECTION_TYPES.has(connectionType)) return res.status(400).json({ error: "Connection type must be 'single' or 'double'." });
   if (!(qty >= 1)) return res.status(400).json({ error: `Number of connections must be a whole number from 1 to ${MAX_QTY}.` });
+  if (amount > 0 && !PAYMENT_MODES.has(paymentMode)) {
+    return res.status(400).json({ error: "Payment mode must be exactly 'cash' or 'online'." });
+  }
 
   const row = {
     event_date: date, event_type: 'new', product_id: productId, connection_type: connectionType, qty,
     cylinders_out: qty * cylindersPer(connectionType), cylinders_in: 0, cylinders_missing: 0,
-    amount: 0, payment_mode: null, penalty_deducted: 0, net_paid: 0, remarks,
+    amount, payment_mode: amount > 0 ? paymentMode : (paymentMode || null), penalty_deducted: 0, net_paid: 0, remarks,
   };
   return recordEvent(req, res, { row, penalties: [], key: idemKeyOrRandom(b.idempotencyKey), auditType: 'connection.new' });
 });
@@ -2200,8 +2205,8 @@ app.get('/api/connection-events', verifyToken, async (req, res) => {
         additionalBottles: sum(e => e.eventType === 'additional' ? e.qty : 0),
         surrenders: sum(e => e.eventType === 'surrender' ? e.qty : 0),
         cylindersOut: sum(e => e.cylindersOut), cylindersIn: sum(e => e.cylindersIn), cylindersMissing: sum(e => e.cylindersMissing),
-        collectedCash: sum(e => e.eventType === 'additional' && e.mode === 'cash' ? e.amount : 0),
-        collectedOnline: sum(e => e.eventType === 'additional' && e.mode === 'online' ? e.amount : 0),
+        collectedCash: sum(e => (e.eventType === 'additional' || e.eventType === 'new') && e.mode === 'cash' ? e.amount : 0),
+        collectedOnline: sum(e => (e.eventType === 'additional' || e.eventType === 'new') && e.mode === 'online' ? e.amount : 0),
         refundGross: sum(e => e.eventType === 'surrender' ? e.amount : 0),
         penaltyDeducted: sum(e => e.penaltyDeducted), netPaid: sum(e => e.netPaid),
       }
@@ -2354,12 +2359,17 @@ app.get('/api/connections/reports/monthly', verifyToken, requireAdmin, async (re
     for (const r of rows) {
       const m = months[r.month] || (months[r.month] = { month: r.month, newConnections: 0, newCylindersIssued: 0, additionalBottles: 0, additionalCash: 0, additionalOnline: 0,
                                                          surrenders: 0, cylindersReturned: 0, cylindersMissing: 0, refundAmount: 0, penaltyDeducted: 0, netPaid: 0 });
-      if (r.eventType === 'new') { m.newConnections += num(r.qty); m.newCylindersIssued += num(r.cylindersOut); }
+      if (r.eventType === 'new') {
+        m.newConnections += num(r.qty);
+        m.newCylindersIssued += num(r.cylindersOut);
+        m.newCash = round2((m.newCash || 0) + num(r.cash));
+        m.newOnline = round2((m.newOnline || 0) + num(r.online));
+      }
       if (r.eventType === 'additional') { m.additionalBottles += num(r.qty); m.additionalCash = round2(m.additionalCash + num(r.cash)); m.additionalOnline = round2(m.additionalOnline + num(r.online)); }
       if (r.eventType === 'surrender') { m.surrenders += num(r.qty); m.cylindersReturned += num(r.cylindersIn); m.cylindersMissing += num(r.cylindersMissing);
         m.refundAmount = round2(m.refundAmount + num(r.amount)); m.penaltyDeducted = round2(m.penaltyDeducted + num(r.penalty)); m.netPaid = round2(m.netPaid + num(r.netPaid)); }
     }
-    const list = Object.values(months).map(m => ({ ...m, netCashEffect: round2(m.additionalCash - m.netPaid), netConnectionChange: m.newConnections - m.surrenders }));
+    const list = Object.values(months).map(m => ({ ...m, netCashEffect: round2((m.additionalCash + (m.newCash || 0)) - m.netPaid), netConnectionChange: m.newConnections - m.surrenders }));
     res.json({ from, to, productId: productId || null, months: list });
   } catch (error) {
     console.error('Connections monthly report error:', error);
@@ -2367,7 +2377,7 @@ app.get('/api/connections/reports/monthly', verifyToken, requireAdmin, async (re
   }
 });
 
-/* Payments collected register (additional bottles). */
+/* Payments collected register (additional bottles & new connections). */
 app.get('/api/connections/payments', verifyToken, requireAdmin, async (req, res) => {
   const bad = rangeProblem(req.query);
   if (bad) return res.status(400).json({ error: bad });
@@ -2376,7 +2386,7 @@ app.get('/api/connections/payments', verifyToken, requireAdmin, async (req, res)
   if (mode && !PAYMENT_MODES.has(mode)) return res.status(400).json({ error: "mode must be 'cash' or 'online'." });
   try {
     const params = [];
-    let where = "event_type = 'additional'";
+    let where = "(event_type = 'additional' OR (event_type = 'new' AND amount > 0))";
     if (req.query.from) { where += ' AND event_date >= ?'; params.push(req.query.from); }
     if (req.query.to)   { where += ' AND event_date <= ?'; params.push(req.query.to); }
     if (mode)           { where += ' AND payment_mode = ?'; params.push(mode); }

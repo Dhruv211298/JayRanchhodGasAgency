@@ -270,6 +270,18 @@ t("one payment of each mode: only the cash one moves the drawer", () => {
   assert.equal(c.totalConnectionPaymentsCash + c.totalConnectionPaymentsOnline, 4500);
 });
 
+t("new connection payments: cash moves drawer, online is reported separately", () => {
+  const base = calcEntry(CASH_BASE).cashOnHand;
+  const c = calcEntry({
+    ...CASH_BASE,
+    connectionNew: [{ amt: 2200, mode: "cash" }, { amt: 4400, mode: "online" }],
+    connectionPayments: [{ amt: 1500, mode: "cash" }]
+  });
+  assert.equal(c.totalConnectionPaymentsCash, 3700); // 2200 new + 1500 additional
+  assert.equal(c.totalConnectionPaymentsOnline, 4400);
+  assert.equal(c.cashOnHand, base + 3700);
+});
+
 t("surrender refund (net paid) LOWERS cashOnHand by exactly its amount", () => {
   const base = calcEntry(CASH_BASE).cashOnHand;
   const c = calcEntry({ ...CASH_BASE, connectionRefunds: [{ amt: 1650, refundAmount: 2000, penaltyDeducted: 350 }] });

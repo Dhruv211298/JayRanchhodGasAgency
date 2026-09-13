@@ -117,8 +117,8 @@ export function ConnectionsDayCard({ entry, calcs, products = PRODUCTS, onConnec
 
           {/* Cash effect totals */}
           <div style={{ fontSize: 11, fontWeight: 700, display: "flex", gap: 10, background: "#fff", padding: "4px 10px", borderRadius: 8, border: `1px solid ${T.border}` }}>
-            <span style={{ color: T.success }} title="Additional bottle cash collections">+{inr(calcs.totalConnectionPaymentsCash || 0)} Cash</span>
-            <span style={{ color: T.blue }} title="Additional bottle online payments (bank)">{inr(calcs.totalConnectionPaymentsOnline || 0)} Online</span>
+            <span style={{ color: T.success }} title="Connection & additional bottle cash collections">+{inr(calcs.totalConnectionPaymentsCash || 0)} Cash</span>
+            <span style={{ color: T.blue }} title="Connection & additional bottle online payments (bank)">{inr(calcs.totalConnectionPaymentsOnline || 0)} Online</span>
             <span style={{ color: T.danger }} title="Surrender refund payouts">−{inr(calcs.totalConnectionRefunds || 0)} Refunds</span>
           </div>
         </div>
@@ -139,7 +139,7 @@ export function ConnectionsDayCard({ entry, calcs, products = PRODUCTS, onConnec
                   color: activeForm === "new" ? "#fff" : T.inkMid
                 }}
               >
-                ➕ New Connection (Stock only)
+                ➕ New Connection (Cash / Online)
               </button>
               <button
                 type="button"
@@ -241,8 +241,18 @@ export function ConnectionsDayCard({ entry, calcs, products = PRODUCTS, onConnec
                   <td style={{ fontWeight: 600 }}>{productLabel(x.productId, products)}</td>
                   <td style={{ textAlign: "right" }}>{x.qty} {x.connectionType}</td>
                   <td style={{ color: T.danger, fontSize: 12 }}>−{x.cylindersOut} filled</td>
-                  <td style={{ fontSize: 12, color: T.inkMid }}>{x.remarks || "—"}</td>
-                  <td style={{ textAlign: "right", color: T.inkLight, fontSize: 11 }}>none (BPCL deposit)</td>
+                  <td style={{ fontSize: 12, color: T.inkMid }}>
+                    {x.mode === "cash" ? "💵 Cash" : x.mode === "online" ? "🏦 Online" : ""}
+                    {x.remarks ? (x.mode ? ` · ${x.remarks}` : x.remarks) : (!x.mode ? "—" : "")}
+                  </td>
+                  <td style={{ textAlign: "right", fontWeight: num(x.amt) > 0 ? 700 : 400, color: x.mode === "cash" ? T.success : x.mode === "online" ? T.blue : T.inkLight, fontSize: num(x.amt) > 0 ? 12 : 11 }}>
+                    {num(x.amt) > 0 ? (
+                      <>
+                        {x.mode === "cash" ? "+" : ""}{inr(x.amt)}
+                        {x.mode === "online" ? <div style={{ fontSize: 9, color: T.inkLight }}>bank (not in till)</div> : null}
+                      </>
+                    ) : "none"}
+                  </td>
                   {isAdmin && (
                     <td>
                       <button className="btn-icon" title="Void event" onClick={() => handleVoid({ id: x.id, eventType: "new" })}>×</button>

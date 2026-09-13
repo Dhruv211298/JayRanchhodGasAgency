@@ -285,8 +285,14 @@ export const calcEntry = (e) => {
                          like chequeOnline.
        connectionRefunds   net cash handed back at surrender.
          → SUBTRACTED from cashOnHand, exactly like expenses. */
-  const totalConnectionPaymentsCash = (e.connectionPayments||[]).filter(x => x.mode === 'cash').reduce((s, x) => s + num(x.amt), 0);
-  const totalConnectionPaymentsOnline = (e.connectionPayments||[]).filter(x => x.mode === 'online').reduce((s, x) => s + num(x.amt), 0);
+  const totalConnectionPaymentsCash = (
+    (e.connectionPayments||[]).filter(x => x.mode === 'cash').reduce((s, x) => s + num(x.amt), 0) +
+    (e.connectionNew||[]).filter(x => x.mode === 'cash').reduce((s, x) => s + num(x.amt), 0)
+  );
+  const totalConnectionPaymentsOnline = (
+    (e.connectionPayments||[]).filter(x => x.mode === 'online').reduce((s, x) => s + num(x.amt), 0) +
+    (e.connectionNew||[]).filter(x => x.mode === 'online').reduce((s, x) => s + num(x.amt), 0)
+  );
   const totalConnectionRefunds = (e.connectionRefunds||[]).reduce((s, x) => s + num(x.amt), 0);
 
   // Identify same-day payments (recoveries received today for credit sales created today)
