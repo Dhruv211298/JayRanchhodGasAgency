@@ -3,42 +3,69 @@ import { T } from "../styles";
 import { inr, num, fmtDate, fmtMonth, todayStr, downloadCsv } from "../constants";
 
 export default function SharedSalaryReport({ entries = [], employees = [], isAdmin = false }) {
+  // System went live in August 2026 — accounting for salaries starts strictly from this date
+  const SYSTEM_START_MONTH = "2026-08";
+
   // Current month string "YYYY-MM"
   const currentMonthStr = todayStr().slice(0, 7);
 
   // Tab View Mode: "month" (Month-wise all employees) | "employee" (Employee-wise historical ledger)
   const [viewMode, setViewMode] = useState("month");
 
-  // Selected month for Month-wise view
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
+  // Selected month for Month-wise view (default current month, clamped >= SYSTEM_START_MONTH)
+  const [selectedMonth, setSelectedMonth] = useState(
+    currentMonthStr >= SYSTEM_START_MONTH ? currentMonthStr : SYSTEM_START_MONTH
+  );
   const [selYear, selMonthNum] = selectedMonth.split("-").map(Number);
 
   // Selected employee for Employee-wise view
   const [selectedEmpId, setSelectedEmpId] = useState(employees[0] ? String(employees[0].id) : "");
 
   // All salary payments flattened across all days with entry dates & target months
+  // Strictly filter out any test entries or disbursements before system went live (August 2026)
   const allPayments = useMemo(() => {
-    return (entries || []).flatMap(e =>
-      (e.salaryPayments || []).map(p => ({
-        ...p,
-        date: e.date,
-        effectiveMonth: p.forMonth || (e.date ? e.date.slice(0, 7) : currentMonthStr)
-      }))
-    );
+    return (entries || [])
+      .filter(e => e.date && e.date >= `${SYSTEM_START_MONTH}-01`)
+      .flatMap(e =>
+        (e.salaryPayments || []).map(p => ({
+          ...p,
+          date: e.date,
+          effectiveMonth: p.forMonth || (e.date ? e.date.slice(0, 7) : currentMonthStr)
+        }))
+      )
+      .filter(p => p.effectiveMonth >= SYSTEM_START_MONTH);
   }, [entries, currentMonthStr]);
 
-  // Available unique months list (sorted newest first)
+  // Available unique months list (sorted newest first, strictly >= SYSTEM_START_MONTH)
   const availableMonths = useMemo(() => {
     const set = new Set();
     set.add(currentMonthStr);
-    (entries || []).forEach(e => { if (e.date) set.add(e.date.slice(0, 7)); });
-    allPayments.forEach(p => { if (p.effectiveMonth) set.add(p.effectiveMonth); });
-    const now = new Date();
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    (entries || []).forEach(e => {
+      if (e.date && e.date.slice(0, 7) >= SYSTEM_START_MONTH) {
+        set.add(e.date.slice(0, 7));
+      }
+    });
+    allPayments.forEach(p => {
+      if (p.effectiveMonth && p.effectiveMonth >= SYSTEM_START_MONTH) {
+        set.add(p.effectiveMonth);
+      }
+    });
+    // Continuous calendar months from August 2026 up to current month
+    const [startYear, startM] = SYSTEM_START_MONTH.split("-").map(Number);
+    const [currYear, currM] = currentMonthStr.split("-").map(Number);
+    let y = startYear;
+    let m = startM;
+    while (y < currYear || (y === currYear && m <= currM)) {
+      set.add(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) {
+        m = 1;
+        y++;
+      }
     }
-    return Array.from(set).sort((a, b) => b.localeCompare(a));
+    return Array.from(set)
+      .filter(mStr => mStr >= SYSTEM_START_MONTH)
+      .sort((a, b) => b.localeCompare(a));
   }, [entries, allPayments, currentMonthStr]);
 
   // Month navigation helpers
@@ -49,7 +76,10 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
 
   const handlePrevMonth = () => {
     const d = new Date(selYear, selMonthNum - 2, 1);
-    setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const prevStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    if (prevStr >= SYSTEM_START_MONTH) {
+      setSelectedMonth(prevStr);
+    }
   };
 
   const handleNextMonth = () => {
@@ -58,17 +88,25 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
   };
 
   const handleMonthChange = (mNum) => {
-    setSelectedMonth(`${selYear}-${String(mNum).padStart(2, "0")}`);
+    const targetStr = `${selYear}-${String(mNum).padStart(2, "0")}`;
+    if (targetStr >= SYSTEM_START_MONTH) {
+      setSelectedMonth(targetStr);
+    }
   };
 
   const handleYearChange = (yNum) => {
-    setSelectedMonth(`${yNum}-${String(selMonthNum).padStart(2, "0")}`);
+    const targetStr = `${yNum}-${String(selMonthNum).padStart(2, "0")}`;
+    if (targetStr >= SYSTEM_START_MONTH) {
+      setSelectedMonth(targetStr);
+    } else {
+      setSelectedMonth(`${yNum}-08`);
+    }
   };
 
-  // Year choices
+  // Year choices (starting from 2026 when system went live)
   const entryYears = (entries || []).map(e => parseInt(e.date?.slice(0, 4))).filter(Boolean);
   const thisYear = new Date().getFullYear();
-  const minYear = Math.min(thisYear - 2, ...entryYears, 2024);
+  const minYear = 2026;
   const maxYear = Math.max(thisYear + 2, ...entryYears, 2028);
   const yearOptions = [];
   for (let y = minYear; y <= maxYear; y++) yearOptions.push(y);
@@ -78,10 +116,15 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
   // ════════════════════════════════════════════════════════════════
   const monthSummaries = useMemo(() => {
     return (employees || []).map(emp => {
+      const rawJoin = emp.join_date || emp.joinDate || "";
+      const empJoinMonth = rawJoin ? rawJoin.slice(0, 7) : SYSTEM_START_MONTH;
+      const effectiveStartMonth = empJoinMonth > SYSTEM_START_MONTH ? empJoinMonth : SYSTEM_START_MONTH;
+      const notJoinedYet = effectiveStartMonth > selectedMonth;
+
       const empPayments = allPayments.filter(
         p => String(p.employeeId) === String(emp.id) && p.effectiveMonth === selectedMonth
       );
-      const baseSalary = num(emp.salary || emp.base_salary || emp.baseSalary || 12000);
+      const baseSalary = notJoinedYet ? 0 : num(emp.salary || emp.base_salary || emp.baseSalary || 12000);
       const advance = empPayments.filter(p => p.type === "Advance").reduce((s, p) => s + num(p.amt), 0);
       const salaryPaid = empPayments.filter(p => p.type === "Salary").reduce((s, p) => s + num(p.amt), 0);
       const totalPaid = advance + salaryPaid;
@@ -93,6 +136,7 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
         salaryPaid,
         totalPaid,
         balance,
+        notJoinedYet,
         paymentCount: empPayments.length
       };
     });
@@ -129,9 +173,16 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
 
   const empMonthByMonth = useMemo(() => {
     if (!currentSelectedEmp) return [];
+    const rawJoin = currentSelectedEmp.join_date || currentSelectedEmp.joinDate || "";
+    const empJoinMonth = rawJoin ? rawJoin.slice(0, 7) : SYSTEM_START_MONTH;
+    // Employee's salary ledger starts from their join month or system launch, whichever is later
+    const empStartMonth = empJoinMonth > SYSTEM_START_MONTH ? empJoinMonth : SYSTEM_START_MONTH;
     const baseSalary = num(currentSelectedEmp.salary || currentSelectedEmp.base_salary || currentSelectedEmp.baseSalary || 12000);
 
-    return availableMonths.map(mStr => {
+    // Only include months from the employee's active starting month onwards
+    const empMonths = availableMonths.filter(mStr => mStr >= empStartMonth);
+
+    return empMonths.map(mStr => {
       const mPayments = allPayments.filter(
         p => String(p.employeeId) === String(currentSelectedEmp.id) && p.effectiveMonth === mStr
       );
@@ -325,7 +376,18 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn-ghost" onClick={handlePrevMonth} title="Previous Month" style={{ padding: "7px 14px", fontWeight: 700 }}>
+              <button
+                className="btn-ghost"
+                onClick={handlePrevMonth}
+                disabled={selectedMonth <= SYSTEM_START_MONTH}
+                title={selectedMonth <= SYSTEM_START_MONTH ? "System start is August 2026" : "Previous Month"}
+                style={{
+                  padding: "7px 14px",
+                  fontWeight: 700,
+                  opacity: selectedMonth <= SYSTEM_START_MONTH ? 0.4 : 1,
+                  cursor: selectedMonth <= SYSTEM_START_MONTH ? "not-allowed" : "pointer"
+                }}
+              >
                 ◀ Prev
               </button>
               
@@ -335,9 +397,15 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                 onChange={(e) => handleMonthChange(Number(e.target.value))}
                 style={{ width: 140, fontWeight: 600, padding: "7px 12px" }}
               >
-                {monthNames.map((name, idx) => (
-                  <option key={idx + 1} value={idx + 1}>{name}</option>
-                ))}
+                {monthNames.map((name, idx) => {
+                  const mVal = idx + 1;
+                  const isBeforeStart = selYear === 2026 && mVal < 8;
+                  return (
+                    <option key={mVal} value={mVal} disabled={isBeforeStart}>
+                      {name} {isBeforeStart ? "(Pre-system)" : ""}
+                    </option>
+                  );
+                })}
               </select>
 
               <select 
@@ -473,7 +541,9 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                         {inr(s.balance)}
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        {s.balance < 0 ? (
+                        {s.notJoinedYet ? (
+                          <span className="badge badge-ink" style={{ fontSize: 9.5 }}>NOT JOINED</span>
+                        ) : s.balance < 0 ? (
                           <span className="badge badge-danger">OVERPAID</span>
                         ) : s.balance === 0 ? (
                           <span className="badge badge-success">SETTLED</span>
@@ -666,13 +736,16 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                   </div>
                   <div style={{ fontSize: 12, color: T.inkMid, borderTop: "1px solid #f1f5f9", paddingTop: 6 }}>
                     Base: <strong style={{ color: T.accent }}>{inr(num(currentSelectedEmp.salary || 12000))}/mo</strong>
+                    <span style={{ color: T.inkLight, marginLeft: 8, fontSize: 11 }}>
+                      {currentSelectedEmp.join_date ? `· Joined ${fmtDate(currentSelectedEmp.join_date)}` : `· Online since Aug 2026`}
+                    </span>
                   </div>
                 </div>
 
                 <div className="stat-card" style={{ "--kpi-color": T.warn }}>
                   <div className="stat-val" style={{ color: T.warn }}>{inr(empLifetimeTotals.totalAdvance)}</div>
                   <div className="stat-lbl">Lifetime Advance Taken</div>
-                  <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10.5 }}>Across all recorded months</div>
+                  <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10.5 }}>Since Aug 2026</div>
                 </div>
 
                 <div className="stat-card" style={{ "--kpi-color": T.blue }}>
@@ -696,7 +769,11 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                   </div>
                   <div className="stat-lbl" style={{ fontWeight: 800 }}>Total Balance Due</div>
                   <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10.5 }}>
-                    {empLifetimeTotals.totalOverpaid > 0 ? `Over-advance: ${inr(empLifetimeTotals.totalOverpaid)}` : "All settled"}
+                    {empLifetimeTotals.totalOverpaid > 0
+                      ? `Over-advance: ${inr(empLifetimeTotals.totalOverpaid)}`
+                      : empLifetimeTotals.totalDue > 0
+                      ? `Pending: ${inr(empLifetimeTotals.totalDue)}`
+                      : "All settled"}
                   </div>
                 </div>
               </div>
