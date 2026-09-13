@@ -141,7 +141,46 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
   // Expenses breakdown
   const mGeneralExpenses = rangeEntries.reduce((s, e) => s + calcEntry(e).totalExpenses, 0);
   const mVehicleExpenses = rangeEntries.reduce((s, e) => s + calcEntry(e).totalVehicleExp, 0);
-  const mSalaryExpenses  = rangeEntries.reduce((s, e) => s + calcEntry(e).totalSalaryPayments, 0);
+  // Salary expenses & breakdown:
+  // - Single day view: counts cash disbursements made on that calendar day (calcEntry).
+  // - Full month / date-range views: accrues salary disbursements (advances + final payouts)
+  //   belonging to the payroll month (forMonth), ensuring late disbursements (e.g. August salaries
+  //   paid Sept 1-10) are included in August's P&L and not erroneously left out.
+  const mSalaryBreakdown = (() => {
+    if (isSingleDay) {
+      let adv = 0, sal = 0;
+      (rangeEntries[0]?.salaryPayments || []).forEach(p => {
+        if (p.type === "Salary") sal += num(p.amt); else adv += num(p.amt);
+      });
+      return { advance: adv, salary: sal, total: adv + sal };
+    }
+    const fromMonth = fromDate ? fromDate.slice(0, 7) : "";
+    const toMonth = toDate ? toDate.slice(0, 7) : "";
+    const isStartOfMonth = fromDate && fromDate.endsWith("-01");
+    const isEndOfMonth = toDate && toDate === getMonthBounds(new Date(toDate + "T00:00:00")).end;
+
+    if ((!fromDate && !toDate) || (isStartOfMonth && isEndOfMonth)) {
+      let adv = 0, sal = 0;
+      (entries || []).forEach(e => {
+        (e.salaryPayments || []).forEach(p => {
+          const effMonth = p.forMonth || (e.date ? e.date.slice(0, 7) : "");
+          if (!fromDate || (effMonth >= fromMonth && effMonth <= toMonth)) {
+            if (p.type === "Salary") sal += num(p.amt); else adv += num(p.amt);
+          }
+        });
+      });
+      return { advance: adv, salary: sal, total: adv + sal };
+    }
+    let adv = 0, sal = 0;
+    rangeEntries.forEach(e => {
+      (e.salaryPayments || []).forEach(p => {
+        if (p.type === "Salary") sal += num(p.amt); else adv += num(p.amt);
+      });
+    });
+    return { advance: adv, salary: sal, total: adv + sal };
+  })();
+
+  const mSalaryExpenses  = mSalaryBreakdown.total;
   const mTotalExpenses   = mGeneralExpenses + mVehicleExpenses + mSalaryExpenses;
 
   // Real Profit = (Agency Commission + Accessory Sales) - Total Operating Expenses
@@ -329,7 +368,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         <div className="stat-card" style={{ "--kpi-color": T.danger }}>
           <div className="stat-val" style={{ color: T.danger }}>{inr(mTotalExpenses)}</div>
           <div className="stat-lbl">Total Expenses</div>
-          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }} title={`General: ${inr(mGeneralExpenses)} | Vehicles: ${inr(mVehicleExpenses)} | Salaries: ${inr(mSalaryExpenses)}`}>
+          <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }} title={`General: ${inr(mGeneralExpenses)} | Vehicles: ${inr(mVehicleExpenses)} | Salaries: ${inr(mSalaryExpenses)}${mSalaryBreakdown.advance > 0 && mSalaryBreakdown.salary > 0 ? ` (Adv: ${inr(mSalaryBreakdown.advance)} + Sal: ${inr(mSalaryBreakdown.salary)})` : ""}`}>
             Gen: {inr(mGeneralExpenses)} · Veh: {inr(mVehicleExpenses)} · Sal: {inr(mSalaryExpenses)}
           </div>
         </div>
@@ -409,8 +448,15 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
               <span style={{ fontSize: 13, color: T.inkMid }}>Vehicle & Fuel Expenses</span>
               <span style={{ fontWeight: 600, color: T.danger }}>−{inr(mVehicleExpenses)}</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
-              <span style={{ fontSize: 13, color: T.inkMid }}>Employee Salaries & Advances</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
+              <div>
+                <span style={{ fontSize: 13, color: T.inkMid }}>Employee Salaries & Advances</span>
+                {mSalaryBreakdown.total > 0 && mSalaryBreakdown.advance > 0 && mSalaryBreakdown.salary > 0 && (
+                  <div style={{ fontSize: 10, color: T.inkLight, marginTop: 1 }}>
+                    Adv: {inr(mSalaryBreakdown.advance)} · Sal: {inr(mSalaryBreakdown.salary)}
+                  </div>
+                )}
+              </div>
               <span style={{ fontWeight: 600, color: T.danger }}>−{inr(mSalaryExpenses)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", borderBottom: "1px solid #e0e0e0", background: "rgba(239,68,68,0.06)", borderRadius: 4, marginTop: 4 }}>
