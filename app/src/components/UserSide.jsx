@@ -725,6 +725,16 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
         </div>
       </div>
 
+      {/* Connection Events & Quick Record — immediately below Cylinder Stock & Sales */}
+      <ConnectionsDayCard
+        entry={entry}
+        calcs={calcs}
+        products={products}
+        onConnectionsChanged={onConnectionsChanged}
+        isAdmin={isAdmin}
+        canEdit={canEdit}
+      />
+
       <div className="g2" style={{ marginBottom: 14 }}>
         <div className="card" style={{ height: "100%" }}>
           <div className="card-head">
@@ -1051,16 +1061,6 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
           )}
         </div>
       </div>
-
-      {/* Connection module events for this date with full record options (New Connection, Additional Bottle, Surrender) */}
-      <ConnectionsDayCard
-        entry={entry}
-        calcs={calcs}
-        products={products}
-        onConnectionsChanged={onConnectionsChanged}
-        isAdmin={isAdmin}
-        canEdit={canEdit}
-      />
 
       {/* Combined Outflows & Expenses Card */}
       <div className="card" style={{ marginBottom: 14 }}>
