@@ -131,7 +131,7 @@ export default function App() {
       const result = await api.verifySession();
       if (result.valid) {
         setAuthedRole(result.role);
-        setTab(result.role === "admin" ? "admin-entry" : "entry");
+        setTab(result.role === "admin" ? "admin-dashboard" : "entry");
         await loadData();
       } else {
         // Token missing, expired, or invalid — clear it and show login
@@ -294,7 +294,7 @@ export default function App() {
   if (!authedRole) return <LoginScreen onAuth={async ({ token, role }) => {
     localStorage.setItem("authToken", token);
     setAuthedRole(role);
-    setTab(role === "admin" ? "admin-entry" : "entry");
+    setTab(role === "admin" ? "admin-dashboard" : "entry");
     setLoading(true);
     await loadData(); // Fresh load on login
   }} />;
@@ -319,10 +319,10 @@ export default function App() {
   ];
 
   const TABS_ADMIN = [
-    { id: "admin-entry", label: "📋 Daily Entry" },
-    { id: "admin-history", label: "📅 History" },
     { id: "admin-dashboard", label: "⬛ Dashboard" },
     { id: "admin-reports", label: "📊 All Reports" },
+    { id: "admin-entry", label: "📋 Daily Entry" },
+    { id: "admin-history", label: "📅 History" },
     { id: "admin-prices", label: "📈 Prices" },
     { id: "admin-comm", label: "💰 Commission" },
     { id: "admin-products", label: "📦 Product Master" },
