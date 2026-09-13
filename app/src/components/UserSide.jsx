@@ -1240,7 +1240,7 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
                     <td>
                       <select
                         className="inp-inline left"
-                        value={x.forMonth || monthStr()}
+                        value={x.forMonth || getSalaryMonth()}
                         onChange={(e) => listSet("salaryPayments", x.id, "forMonth", e.target.value)}
                         style={{ fontSize: 12 }}
                         disabled={!canEdit}
@@ -1817,12 +1817,22 @@ export function PendingCredits({ pending, onRecord, products = PRODUCTS }) {
 export function Summary({ entries, products = PRODUCTS }) {
   const [period, setPeriod] = useState("month");
   const now = new Date();
+  const curMonthStr = monthStr(now);
   const filtered = entries.filter((e) => {
     const d = new Date(e.date + "T00:00:00");
     if (period === "week") { const wa = new Date(); wa.setDate(wa.getDate() - 7); return d >= wa; }
     if (period === "month") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     return true;
   });
+
+  // For monthly view, accrue salary payments belonging to the payroll month (forMonth)
+  const monthSalaryTotal = (entries || []).reduce((sum, e) => {
+    return sum + (e.salaryPayments || []).reduce((s, p) => {
+      const effMonth = p.forMonth || (e.date ? e.date.slice(0, 7) : "");
+      return effMonth === curMonthStr ? s + num(p.amt) : s;
+    }, 0);
+  }, 0);
+
   const totals = filtered.reduce((acc, e) => {
     const c = calcEntry(e);
     acc.sales += c.totalSales + c.totalAccessorySales;
@@ -1830,13 +1840,17 @@ export function Summary({ entries, products = PRODUCTS }) {
     acc.credit += c.totalCredit;
     acc.cheque += c.totalCheque;
     acc.delivery += c.totalDelivery;
-    acc.salary += c.totalSalaryPayments;
+    acc.salary += (period === "month" ? 0 : c.totalSalaryPayments);
     acc.connCash += c.totalConnectionPaymentsCash;
     acc.connOnline += c.totalConnectionPaymentsOnline;
     acc.connRefunds += c.totalConnectionRefunds;
     acc.bob += num(e.bob);
     return acc;
   }, { sales: 0, expenses: 0, credit: 0, cheque: 0, delivery: 0, salary: 0, connCash: 0, connOnline: 0, connRefunds: 0, bob: 0 });
+
+  if (period === "month") {
+    totals.salary = monthSalaryTotal;
+  }
   const productTotals = (products || PRODUCTS).map((p) => {
     const findProd = (e) => (e.products || []).find(x => x.id === p.id) || {};
     const cashQty = filtered.reduce((s, e) => s + num(findProd(e).sell), 0);

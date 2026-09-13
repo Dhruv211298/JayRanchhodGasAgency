@@ -357,7 +357,7 @@ export const blankExpense = () => ({ id: uid(), desc: "", amt: "" });
 export const blankCheque = () => ({ id: uid(), desc: "", amt: "" });
 export const blankCredit = () => ({ id: uid(), customerName: "", productId: "p14", filledQty: "", emptyQty: "", amt: "", remarks: "" });
 export const blankVehicleExp = () => ({ id: uid(), vehicleId: "", vehicleNo: "", expType: "Fuel", desc: "", amt: "" });
-export const blankSalaryPayment = () => ({ id: uid(), employeeId: "", employeeName: "", amt: "", type: "Salary", notes: "", forMonth: monthStr() });
+export const blankSalaryPayment = () => ({ id: uid(), employeeId: "", employeeName: "", amt: "", type: "Salary", notes: "", forMonth: getSalaryMonth() });
 export const blankArrival = (productList = PRODUCTS) => {
   const cylinders = (productList || PRODUCTS).filter(p => p.category !== 'accessory' && p.isActive !== 0 && p.is_active !== 0);
   const list = cylinders.length > 0 ? cylinders : PRODUCTS;

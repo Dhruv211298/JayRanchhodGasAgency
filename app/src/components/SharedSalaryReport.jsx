@@ -527,6 +527,7 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                     <th>Date Paid</th>
                     <th style={{ textAlign: "left" }}>Employee</th>
                     <th style={{ textAlign: "center" }}>Type</th>
+                    <th style={{ textAlign: "center" }}>For Month</th>
                     <th style={{ textAlign: "right" }}>Amount</th>
                     <th style={{ textAlign: "left" }}>Notes / Remarks</th>
                   </tr>
@@ -534,7 +535,7 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                 <tbody>
                   {monthIndividualPayments.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: "center", padding: "28px 10px", color: T.inkLight }}>
+                      <td colSpan={6} style={{ textAlign: "center", padding: "28px 10px", color: T.inkLight }}>
                         No salary or advance payouts recorded for this month.
                       </td>
                     </tr>
@@ -547,6 +548,9 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                         <span className={`badge ${p.type === "Salary" ? "badge-blue" : "badge-warn"}`}>
                           {p.type}
                         </span>
+                      </td>
+                      <td style={{ textAlign: "center", fontSize: 12, color: T.inkMid, fontWeight: 600 }}>
+                        {fmtMonth((p.forMonth || p.date.slice(0, 7)) + "-01")}
                       </td>
                       <td style={{ textAlign: "right", fontWeight: 700, color: T.danger }}>
                         {inr(p.amt)}
@@ -797,7 +801,7 @@ export default function SharedSalaryReport({ entries = [], employees = [], isAdm
                             </span>
                           </td>
                           <td style={{ textAlign: "center", fontSize: 12, color: T.inkMid, fontWeight: 600 }}>
-                            {p.forMonth || p.date.slice(0, 7)}
+                            {fmtMonth((p.forMonth || p.date.slice(0, 7)) + "-01")}
                           </td>
                           <td style={{ textAlign: "right", fontWeight: 700, color: T.danger }}>
                             {inr(p.amt)}

@@ -156,25 +156,15 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
     }
     const fromMonth = fromDate ? fromDate.slice(0, 7) : "";
     const toMonth = toDate ? toDate.slice(0, 7) : "";
-    const isStartOfMonth = fromDate && fromDate.endsWith("-01");
-    const isEndOfMonth = toDate && toDate === getMonthBounds(new Date(toDate + "T00:00:00")).end;
 
-    if ((!fromDate && !toDate) || (isStartOfMonth && isEndOfMonth)) {
-      let adv = 0, sal = 0;
-      (entries || []).forEach(e => {
-        (e.salaryPayments || []).forEach(p => {
-          const effMonth = p.forMonth || (e.date ? e.date.slice(0, 7) : "");
-          if (!fromDate || (effMonth >= fromMonth && effMonth <= toMonth)) {
-            if (p.type === "Salary") sal += num(p.amt); else adv += num(p.amt);
-          }
-        });
-      });
-      return { advance: adv, salary: sal, total: adv + sal };
-    }
+    // Always filter by forMonth (payroll month) when viewing monthly or date-range summaries
     let adv = 0, sal = 0;
-    rangeEntries.forEach(e => {
+    (entries || []).forEach(e => {
       (e.salaryPayments || []).forEach(p => {
-        if (p.type === "Salary") sal += num(p.amt); else adv += num(p.amt);
+        const effMonth = p.forMonth || (e.date ? e.date.slice(0, 7) : "");
+        if (!fromDate || (effMonth >= fromMonth && effMonth <= toMonth)) {
+          if (p.type === "Salary") sal += num(p.amt); else adv += num(p.amt);
+        }
       });
     });
     return { advance: adv, salary: sal, total: adv + sal };
@@ -1155,7 +1145,7 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
         id: `tx-sal-${idx}`,
         category: "Salary / Advance",
         party: x.employeeName || "Employee",
-        desc: `${x.type === "Salary" ? "Salary payment" : "Salary advance"}${x.notes ? ` (${x.notes})` : ""}`,
+        desc: `${x.type === "Salary" ? "Salary payment" : "Salary advance"}${x.forMonth ? ` for ${fmtMonth(x.forMonth + "-01")}` : ""}${x.notes ? ` (${x.notes})` : ""}`,
         mode: "Cash",
         flow: "out",
         amount: num(x.amt),
