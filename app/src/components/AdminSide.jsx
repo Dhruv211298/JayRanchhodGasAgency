@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Swal from "sweetalert2";
 import { api } from "../api";
 import { T } from "../styles";
@@ -912,29 +912,308 @@ export function AdminDayReports({ entries, commissions, products = PRODUCTS, onN
 }
 
 export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
+  const [txFilter, setTxFilter] = useState("all");
+  const [txSearch, setTxSearch] = useState("");
+
   const calcs = calcEntry(entry);
   const totalCyl = entry.products.reduce((s,p)=>s+num(p.sell)+num(p.online),0);
   const totalComm = entry.products.reduce((s,p)=>s+(num(p.sell)+num(p.online))*getCommRate(p.id, commissions, entry.date),0);
 
+  // Compile every individual financial transaction for this day into a structured ledger
+  const allTransactions = useMemo(() => {
+    if (!entry) return [];
+    const list = [];
+
+    // 1. Opening Cash
+    if (num(entry.openingCash) > 0) {
+      list.push({
+        id: "tx-open",
+        category: "Opening Cash",
+        party: "Cash Drawer",
+        desc: "Opening Cash on Hand balance brought forward",
+        mode: "Cash",
+        flow: "in",
+        amount: num(entry.openingCash),
+        cashImpact: num(entry.openingCash),
+        badgeClass: "badge-ink",
+      });
+    }
+
+    // 2. Cash Cylinder Sales (per product)
+    (entry.products || []).forEach(p => {
+      const cashSell = num(p.sell);
+      const sbc = num(p.sbc);
+      const dbc = num(p.dbc);
+      const rev = (cashSell * num(p.rate)) + (sbc * num(p.sbcRate)) + (dbc * num(p.dbcRate));
+      if (rev > 0) {
+        list.push({
+          id: `tx-prod-cash-${p.id}`,
+          category: "Cylinder Sales (Cash)",
+          party: "Counter / Delivery",
+          desc: `${productLabel(p.id, products)}: ${cashSell} sold @ ${inr(p.rate)}${sbc > 0 ? ` + ${sbc} SBC @ ${inr(p.sbcRate)}` : ""}${dbc > 0 ? ` + ${dbc} DBC @ ${inr(p.dbcRate)}` : ""}`,
+          mode: "Cash",
+          flow: "in",
+          amount: rev,
+          cashImpact: rev,
+          badgeClass: "badge-success",
+        });
+      }
+    });
+
+    // 3. Online Cylinder Sales (per product)
+    (entry.products || []).forEach(p => {
+      const onlineSell = num(p.online);
+      const rev = onlineSell * num(p.rate);
+      if (rev > 0) {
+        list.push({
+          id: `tx-prod-online-${p.id}`,
+          category: "Cylinder Sales (Online)",
+          party: "Customer (UPI / QR)",
+          desc: `${productLabel(p.id, products)}: ${onlineSell} sold online @ ${inr(p.rate)} (Auto-deducted to Bank)`,
+          mode: "Online",
+          flow: "in",
+          amount: rev,
+          cashImpact: 0,
+          badgeClass: "badge-blue",
+        });
+      }
+    });
+
+    // 4. Accessories Sales
+    (entry.accessories || []).filter(a => a.sold && num(a.qty) > 0).forEach(a => {
+      const accDef = ACCESSORIES.find(x => x.id === a.accessoryId) || {};
+      const amt = num(a.qty) * num(a.rate);
+      list.push({
+        id: `tx-acc-${a.accessoryId}`,
+        category: "Accessories Sale",
+        party: "Counter Sale",
+        desc: `${accDef.short || accDef.label || a.accessoryId} × ${a.qty} @ ${inr(a.rate)}`,
+        mode: "Cash",
+        flow: "in",
+        amount: amt,
+        cashImpact: amt,
+        badgeClass: "badge-success",
+      });
+    });
+
+    // 5. Credit Recoveries
+    (entry.creditRecoveries || []).filter(cr => num(cr.amt) > 0).forEach((cr, idx) => {
+      list.push({
+        id: `tx-rec-${idx}`,
+        category: "Credit Received",
+        party: cr.customerName || "Customer",
+        desc: `Credit settlement payment${cr.note ? ` (${cr.note})` : ""}${num(cr.emptyReturned) > 0 ? ` · ${cr.emptyReturned} empty returned` : ""}`,
+        mode: "Cash",
+        flow: "in",
+        amount: num(cr.amt),
+        cashImpact: num(cr.amt),
+        badgeClass: "badge-success",
+      });
+    });
+
+    // 6. Other Cash Credits
+    (entry.otherCashCredits || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      list.push({
+        id: `tx-occ-${idx}`,
+        category: "Other Cash Credit",
+        party: "Counter / Misc",
+        desc: x.desc || "Miscellaneous cash receipt",
+        mode: "Cash",
+        flow: "in",
+        amount: num(x.amt),
+        cashImpact: num(x.amt),
+        badgeClass: "badge-success",
+      });
+    });
+
+    // 7. Connection New Issue
+    (entry.connectionNew || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      const isCash = x.mode === "cash";
+      list.push({
+        id: `tx-cnew-${idx}`,
+        category: "Connection (New)",
+        party: x.customerName || "New Consumer",
+        desc: `New SV: ${productLabel(x.productId, products)} (${x.connectionType || "Single"}) · ${isCash ? "Cash" : "Online"}`,
+        mode: isCash ? "Cash" : "Online",
+        flow: "in",
+        amount: num(x.amt),
+        cashImpact: isCash ? num(x.amt) : 0,
+        badgeClass: isCash ? "badge-success" : "badge-blue",
+      });
+    });
+
+    // 8. Connection Additional Bottle
+    (entry.connectionPayments || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      const isCash = x.mode === "cash";
+      list.push({
+        id: `tx-cpay-${idx}`,
+        category: "Connection (Add. Bottle)",
+        party: x.customerName || "Consumer",
+        desc: `Additional Bottle: ${productLabel(x.productId, products)} × ${x.qty || 1} · ${isCash ? "Cash" : "Online"}`,
+        mode: isCash ? "Cash" : "Online",
+        flow: "in",
+        amount: num(x.amt),
+        cashImpact: isCash ? num(x.amt) : 0,
+        badgeClass: isCash ? "badge-success" : "badge-blue",
+      });
+    });
+
+    // 9. Connection Surrender Refunds
+    (entry.connectionRefunds || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      list.push({
+        id: `tx-cref-${idx}`,
+        category: "Connection Refund",
+        party: x.customerName || "Consumer",
+        desc: `SV Surrender Refund: ${productLabel(x.productId, products)}${num(x.penaltyDeducted) > 0 ? ` (Refund ${inr(x.refundAmount)} − Penalty ${inr(x.penaltyDeducted)})` : ""}`,
+        mode: "Cash",
+        flow: "out",
+        amount: num(x.amt),
+        cashImpact: -num(x.amt),
+        badgeClass: "badge-danger",
+      });
+    });
+
+    // 10. Daily Operating Expenses
+    (entry.expenses || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      list.push({
+        id: `tx-exp-${idx}`,
+        category: "Office Expense",
+        party: "Office / Shop",
+        desc: x.desc || "Daily expense",
+        mode: "Cash",
+        flow: "out",
+        amount: num(x.amt),
+        cashImpact: -num(x.amt),
+        badgeClass: "badge-danger",
+      });
+    });
+
+    // 11. Vehicle & Fuel Expenses
+    (entry.vehicleExpenses || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      list.push({
+        id: `tx-veh-${idx}`,
+        category: "Vehicle Expense",
+        party: x.vehicleNo || "Vehicle",
+        desc: `${x.expType || "Fuel"}${x.desc ? ` · ${x.desc}` : ""}`,
+        mode: "Cash",
+        flow: "out",
+        amount: num(x.amt),
+        cashImpact: -num(x.amt),
+        badgeClass: "badge-danger",
+      });
+    });
+
+    // 12. Employee Salaries & Advances
+    (entry.salaryPayments || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      list.push({
+        id: `tx-sal-${idx}`,
+        category: "Salary / Advance",
+        party: x.employeeName || "Employee",
+        desc: `${x.type === "Salary" ? "Salary payment" : "Salary advance"}${x.notes ? ` (${x.notes})` : ""}`,
+        mode: "Cash",
+        flow: "out",
+        amount: num(x.amt),
+        cashImpact: -num(x.amt),
+        badgeClass: "badge-danger",
+      });
+    });
+
+    // 13. Cheque / Online Disbursed
+    (entry.chequeOnline || []).filter(x => num(x.amt) > 0).forEach((x, idx) => {
+      list.push({
+        id: `tx-chk-${idx}`,
+        category: "Cheque / Online Out",
+        party: "Vendor / Bank",
+        desc: x.desc || "Cheque/online payment",
+        mode: "Cheque/Online",
+        flow: "out",
+        amount: num(x.amt),
+        cashImpact: -num(x.amt),
+        badgeClass: "badge-danger",
+      });
+    });
+
+    // 14. Bank of Baroda (BOB) Deposit
+    if (num(entry.bob) > 0) {
+      list.push({
+        id: "tx-bob",
+        category: "BOB Bank Deposit",
+        party: "Bank of Baroda",
+        desc: "Cash drawer funds deposited into Bank of Baroda (BOB) current account",
+        mode: "Bank Deposit",
+        flow: "out",
+        amount: num(entry.bob),
+        cashImpact: -num(entry.bob),
+        badgeClass: "badge-blue",
+      });
+    }
+
+    return list;
+  }, [entry, calcs, products]);
+
+  // Filter transactions based on active view and search query
+  const filteredTransactions = useMemo(() => {
+    return allTransactions.filter(tx => {
+      if (txFilter === "in" && tx.flow !== "in") return false;
+      if (txFilter === "out" && tx.flow !== "out") return false;
+      if (txFilter === "cash" && tx.cashImpact === 0) return false;
+      if (txFilter === "bank" && !["Online", "Bank Deposit", "Cheque/Online"].includes(tx.mode)) return false;
+      if (txSearch) {
+        const q = txSearch.toLowerCase();
+        const match = tx.category.toLowerCase().includes(q) ||
+          tx.desc.toLowerCase().includes(q) ||
+          tx.party.toLowerCase().includes(q) ||
+          String(tx.amount).includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [allTransactions, txFilter, txSearch]);
+
+  const totalInflows = allTransactions.filter(t => t.cashImpact > 0).reduce((s, t) => s + t.cashImpact, 0);
+  const totalOutflows = allTransactions.filter(t => t.cashImpact < 0).reduce((s, t) => s + Math.abs(t.cashImpact), 0);
+
   return (
     <div>
+      {/* Top Metric Cards */}
       <div className="stat-row">
-        <div className="stat-card" style={{ "--kpi-color": T.success }}><div className="stat-val" style={{color:T.success}}>{inr(calcs.totalSales)}</div><div className="stat-lbl">Total Sales</div></div>
+        <div className="stat-card" style={{ "--kpi-color": T.success }}>
+          <div className="stat-val" style={{color:T.success}}>{inr(calcs.totalSales)}</div>
+          <div className="stat-lbl">Total Sales</div>
+        </div>
         <div className="stat-card" style={{ "--kpi-color": "#2563eb" }}>
           <div className="stat-val" style={{ color: num(entry.bob) > 0 ? "#2563eb" : T.inkMid }}>{inr(num(entry.bob))}</div>
           <div className="stat-lbl">BOB Bank Deposit</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>Bank of Baroda Deposit</div>
         </div>
-        <div className="stat-card" style={{ "--kpi-color": calcs.cashOnHand<0?T.danger:T.ink }}><div className="stat-val" style={{color:calcs.cashOnHand<0?T.danger:T.ink}}>{inr(calcs.cashOnHand)}</div><div className="stat-lbl">Cash on Hand</div></div>
-        <div className="stat-card" style={{ "--kpi-color": T.blue }}><div className="stat-val" style={{color:T.blue}}>{totalCyl}</div><div className="stat-lbl">Cylinders Sold</div></div>
-        <div className="stat-card" style={{ "--kpi-color": T.accent }}><div className="stat-val" style={{color:T.accent}}>{inr(totalComm)}</div><div className="stat-lbl">Commission Earned</div></div>
+        <div className="stat-card" style={{ "--kpi-color": calcs.cashOnHand<0?T.danger:T.ink }}>
+          <div className="stat-val" style={{color:calcs.cashOnHand<0?T.danger:T.ink}}>{inr(calcs.cashOnHand)}</div>
+          <div className="stat-lbl">Cash on Hand</div>
+        </div>
+        <div className="stat-card" style={{ "--kpi-color": T.blue }}>
+          <div className="stat-val" style={{color:T.blue}}>{totalCyl}</div>
+          <div className="stat-lbl">Cylinders Sold</div>
+        </div>
+        <div className="stat-card" style={{ "--kpi-color": T.accent }}>
+          <div className="stat-val" style={{color:T.accent}}>{inr(totalComm)}</div>
+          <div className="stat-lbl">Commission Earned</div>
+        </div>
       </div>
 
+      {/* Products Sold Table */}
       <div className="card">
         <div className="card-head"><span className="card-head-title">🛢️ Products Sold</span></div>
         <div style={{overflowX:"auto"}}>
           <table className="tbl">
-            <thead><tr><th>Product</th><th style={{ textAlign: "right" }}>Sold</th><th style={{ textAlign: "right" }}>Rate</th><th style={{ textAlign: "right" }}>Revenue</th><th style={{ textAlign: "right" }}>Commission</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th style={{ textAlign: "right" }}>Sold</th>
+                <th style={{ textAlign: "right" }}>Rate</th>
+                <th style={{ textAlign: "right" }}>Revenue</th>
+                <th style={{ textAlign: "right" }}>Commission</th>
+              </tr>
+            </thead>
             <tbody>
               {entry.products.map((p)=>{
                 const rev = (num(p.sell)+num(p.online))*num(p.rate);
@@ -972,39 +1251,222 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
         </div>
       </div>
 
+      {/* Grid: Financials Details Table + Departmental Cards */}
       <div className="g2">
+        {/* Financials Details Table Card */}
         <div className="card">
-          <div className="card-head"><span className="card-head-title">💰 Financials</span></div>
-          <div className="card-body">
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Opening Cash</span><span style={{fontWeight:600}}>{inr(entry.openingCash)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Cash Cylinder Sales</span><span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalCashSales)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Online Cylinder Sales</span><span style={{fontWeight:600,color:T.blue}}>+{inr(calcs.totalOnlineSales)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Accessories Sales</span><span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalAccessorySales)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Credit Received</span><span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalCreditRecoveries)}</span></div>
-            {calcs.totalOtherCashCredits > 0 && <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Other Cash Credit</span><span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalOtherCashCredits)}</span></div>}
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Connection Payments (Cash)</span><span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalConnectionPaymentsCash)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Connection Payments (Online) <span style={{fontSize:10,color:T.inkLight}}>not in cash</span></span><span style={{fontWeight:600,color:T.blue}}>{inr(calcs.totalConnectionPaymentsOnline)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Online → Bank</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalOnlineSales)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Expenses</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalExpenses)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Connection Refunds</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalConnectionRefunds)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Vehicle Expenses</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalVehicleExp)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Salary / Advance</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalSalaryPayments)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}><span style={{fontSize:12,color:T.inkMid}}>Cheque/Online</span><span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalCheque)}</span></div>
+          <div className="card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span className="card-head-title">💰 Financials Details Table</span>
+            <span className="badge badge-ink" style={{ fontSize: 11 }}>{allTransactions.length} Transactions</span>
+          </div>
+          <div className="card-body" style={{ padding: "10px 16px" }}>
+            {/* Opening Cash */}
+            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Opening Cash</span>
+              <span style={{fontWeight:600}}>{inr(entry.openingCash)}</span>
+            </div>
+
+            {/* Cash Cylinder Sales */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Cash Cylinder Sales</span>
+                <span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalCashSales)}</span>
+              </div>
+              {(entry.products || []).filter(p => num(p.sell) > 0 || num(p.sbc) > 0 || num(p.dbc) > 0).map(p => {
+                const subAmt = (num(p.sell) * num(p.rate)) + (num(p.sbc) * num(p.sbcRate)) + (num(p.dbc) * num(p.dbcRate));
+                return (
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                    <span>• {productLabel(p.id, products)}: {p.sell || 0} Cash @ {inr(p.rate)}{num(p.sbc) > 0 ? ` + ${p.sbc} SBC` : ""}{num(p.dbc) > 0 ? ` + ${p.dbc} DBC` : ""}</span>
+                    <span style={{ color: T.success, fontWeight: 500 }}>+{inr(subAmt)}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Online Cylinder Sales */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Online Cylinder Sales</span>
+                <span style={{fontWeight:600,color:T.blue}}>+{inr(calcs.totalOnlineSales)}</span>
+              </div>
+              {(entry.products || []).filter(p => num(p.online) > 0).map(p => (
+                <div key={p.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                  <span>• {productLabel(p.id, products)}: {p.online} Online @ {inr(p.rate)}</span>
+                  <span style={{ color: T.blue, fontWeight: 500 }}>+{inr(num(p.online) * num(p.rate))}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Accessories Sales */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Accessories Sales</span>
+                <span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalAccessorySales)}</span>
+              </div>
+              {(entry.accessories || []).filter(a => a.sold && num(a.qty) > 0).map(a => {
+                const accDef = ACCESSORIES.find(x => x.id === a.accessoryId) || {};
+                return (
+                  <div key={a.accessoryId} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                    <span>• {accDef.short || accDef.label}: {a.qty} × {inr(a.rate)}</span>
+                    <span style={{ color: T.success, fontWeight: 500 }}>+{inr(num(a.qty) * num(a.rate))}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Credit Received */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Credit Received</span>
+                <span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalCreditRecoveries)}</span>
+              </div>
+              {(entry.creditRecoveries || []).map((cr, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                  <span>• {cr.customerName || "Customer"}{cr.note ? ` (${cr.note})` : ""}{num(cr.emptyReturned) > 0 ? ` [${cr.emptyReturned} empty]` : ""}</span>
+                  <span style={{ color: T.success, fontWeight: 600 }}>+{inr(cr.amt)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Other Cash Credit */}
+            {calcs.totalOtherCashCredits > 0 && (
+              <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Other Cash Credit</span>
+                  <span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalOtherCashCredits)}</span>
+                </div>
+                {(entry.otherCashCredits || []).filter(x => num(x.amt) > 0).map((x, idx) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                    <span>• {x.desc || "Misc Credit"}</span>
+                    <span style={{ color: T.success, fontWeight: 600 }}>+{inr(x.amt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Connection Payments (Cash) */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Connection Payments (Cash)</span>
+                <span style={{fontWeight:600,color:T.success}}>+{inr(calcs.totalConnectionPaymentsCash)}</span>
+              </div>
+              {[...(entry.connectionNew || []).filter(x => x.mode === "cash" && num(x.amt) > 0), ...(entry.connectionPayments || []).filter(x => x.mode === "cash" && num(x.amt) > 0)].map((x, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                  <span>• {x.customerName || "Consumer"}: {productLabel(x.productId, products)}</span>
+                  <span style={{ color: T.success, fontWeight: 600 }}>+{inr(x.amt)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Connection Payments (Online) */}
+            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Connection Payments (Online) <span style={{fontSize:10,color:T.inkLight}}>not in cash</span></span>
+              <span style={{fontWeight:600,color:T.blue}}>{inr(calcs.totalConnectionPaymentsOnline)}</span>
+            </div>
+
+            {/* Online -> Bank Auto-settled */}
+            <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Online → Bank Auto-settled</span>
+              <span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalOnlineSales)}</span>
+            </div>
+
+            {/* Office Expenses */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Office Expenses</span>
+                <span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalExpenses)}</span>
+              </div>
+              {(entry.expenses || []).filter(x => num(x.amt) > 0).map((x, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                  <span>• {x.desc || "Expense"}</span>
+                  <span style={{ color: T.danger, fontWeight: 600 }}>−{inr(x.amt)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Connection Refunds */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Connection Surrender Refunds</span>
+                <span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalConnectionRefunds)}</span>
+              </div>
+              {(entry.connectionRefunds || []).filter(x => num(x.amt) > 0).map((x, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                  <span>• {x.customerName || "Consumer"}: {productLabel(x.productId, products)}</span>
+                  <span style={{ color: T.danger, fontWeight: 600 }}>−{inr(x.amt)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Vehicle Expenses */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Vehicle & Fuel Expenses</span>
+                <span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalVehicleExp)}</span>
+              </div>
+              {(entry.vehicleExpenses || []).filter(x => num(x.amt) > 0).map((x, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                  <span>• {x.vehicleNo || "Vehicle"} ({x.expType || "Fuel"}){x.desc ? ` · ${x.desc}` : ""}</span>
+                  <span style={{ color: T.danger, fontWeight: 600 }}>−{inr(x.amt)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Salary / Advance */}
+            <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Salary / Advances</span>
+                <span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalSalaryPayments)}</span>
+              </div>
+              {(entry.salaryPayments || []).filter(x => num(x.amt) > 0).map((x, idx) => (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                  <span>• {x.employeeName || "Employee"} ({x.type}){x.notes ? ` · ${x.notes}` : ""}</span>
+                  <span style={{ color: T.danger, fontWeight: 600 }}>−{inr(x.amt)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Cheque / Online */}
+            {calcs.totalCheque > 0 && (
+              <div style={{padding:"6px 0",borderBottom:"1px solid #eee"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:12,color:T.inkMid, fontWeight: 600}}>Cheque/Online Out</span>
+                  <span style={{fontWeight:600,color:T.danger}}>-{inr(calcs.totalCheque)}</span>
+                </div>
+                {(entry.chequeOnline || []).filter(x => num(x.amt) > 0).map((x, idx) => (
+                  <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: T.inkLight, padding: "2px 0 2px 12px" }}>
+                    <span>• {x.desc || "Cheque Payment"}</span>
+                    <span style={{ color: T.danger, fontWeight: 600 }}>−{inr(x.amt)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* BOB Bank Deposit */}
             <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #eee", background: num(entry.bob) > 0 ? "rgba(37,99,235,0.04)" : "transparent"}}>
-              <span style={{fontSize:12,color:num(entry.bob) > 0 ? "#1d4ed8" : T.inkMid, fontWeight: num(entry.bob) > 0 ? 700 : 400}}>
+              <span style={{fontSize:12,color:num(entry.bob) > 0 ? "#1d4ed8" : T.inkMid, fontWeight: num(entry.bob) > 0 ? 700 : 600}}>
                 🏦 BOB Bank Deposit (−)
               </span>
               <span style={{fontWeight:700,color:num(entry.bob) > 0 ? T.danger : T.inkLight}}>
                 −{inr(num(entry.bob))}
               </span>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",marginTop:8,borderTop:"2px solid #e2e8f0"}}><span style={{fontSize:12,fontWeight:700,color:T.inkMid}}>CASH ON HAND</span><span style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:700,color:calcs.cashOnHand<0?T.danger:T.success}}>{inr(calcs.cashOnHand)}</span></div>
+
+            {/* Closing Cash on Hand */}
+            <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",marginTop:8,borderTop:"2px solid #e2e8f0"}}>
+              <span style={{fontSize:12,fontWeight:700,color:T.inkMid}}>CASH ON HAND (Closing)</span>
+              <span style={{fontFamily:"'Outfit',sans-serif",fontSize:20,fontWeight:700,color:calcs.cashOnHand<0?T.danger:T.success}}>
+                {inr(calcs.cashOnHand)}
+              </span>
+            </div>
           </div>
         </div>
-        
+
+        {/* Itemized Cards Column */}
         <div style={{display:"flex", flexDirection:"column", gap: 14}}>
+          {/* General Expenses */}
           <div className="card">
-            <div className="card-head"><span className="card-head-title">🧾 Expenses</span><span style={{fontWeight:700,color:T.danger}}>{inr(calcs.totalExpenses)}</span></div>
+            <div className="card-head"><span className="card-head-title">🧾 Office Expenses</span><span style={{fontWeight:700,color:T.danger}}>{inr(calcs.totalExpenses)}</span></div>
             <div style={{overflowX:"auto"}}>
               <table className="tbl">
                 <thead><tr><th>Desc</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
@@ -1016,6 +1478,31 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
             </div>
           </div>
 
+          {/* Vehicle & Fuel Expenses */}
+          {(entry.vehicleExpenses || []).some(x => x.vehicleNo || x.amt || x.desc) && (
+            <div className="card">
+              <div className="card-head">
+                <span className="card-head-title">🚚 Vehicle & Fuel Expenses</span>
+                <span style={{ fontWeight: 700, color: T.danger }}>{inr(calcs.totalVehicleExp)}</span>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table className="tbl">
+                  <thead><tr><th>Vehicle No</th><th>Type / Desc</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+                  <tbody>
+                    {(entry.vehicleExpenses || []).filter(x => x.vehicleNo || x.amt || x.desc).map((x, idx) => (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 600 }}>{x.vehicleNo || "—"}</td>
+                        <td style={{ color: T.inkMid }}>{x.expType || "Fuel"}{x.desc ? ` · ${x.desc}` : ""}</td>
+                        <td style={{ fontWeight: 600, color: T.danger, textAlign: "right" }}>{inr(x.amt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Salary Payments */}
           <div className="card">
             <div className="card-head"><span className="card-head-title">👤 Salary / Advance</span><span style={{fontWeight:700,color:T.danger}}>{inr(calcs.totalSalaryPayments)}</span></div>
             <div style={{overflowX:"auto"}}>
@@ -1029,6 +1516,34 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
             </div>
           </div>
 
+          {/* Credit Recoveries Received */}
+          {(entry.creditRecoveries || []).length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <span className="card-head-title">📥 Credit Recoveries Received</span>
+                <span style={{ fontWeight: 700, color: T.success }}>+{inr(calcs.totalCreditRecoveries)}</span>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table className="tbl">
+                  <thead><tr><th>Customer</th><th>Note / Empties</th><th style={{ textAlign: "right" }}>Amount</th></tr></thead>
+                  <tbody>
+                    {(entry.creditRecoveries || []).map((x, idx) => (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: 600 }}>{x.customerName || "Customer"}</td>
+                        <td style={{ color: T.inkMid, fontSize: 12 }}>
+                          {x.note || "Settlement"}
+                          {num(x.emptyReturned) > 0 && <span style={{ color: "#e67e22", marginLeft: 6 }}>({x.emptyReturned} empty returned)</span>}
+                        </td>
+                        <td style={{ fontWeight: 600, color: T.success, textAlign: "right" }}>+{inr(x.amt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Connections */}
           {((entry.connectionNew||[]).length > 0 || (entry.connectionPayments||[]).length > 0 || (entry.connectionRefunds||[]).length > 0) && (
             <div className="card">
               <div className="card-head"><span className="card-head-title">🔗 Connections</span><span style={{fontWeight:700,color:T.success}}>+{inr(calcs.totalConnectionPaymentsCash)} <span style={{color:T.danger}}>−{inr(calcs.totalConnectionRefunds)}</span></span></div>
@@ -1045,6 +1560,7 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
             </div>
           )}
 
+          {/* Credit Sales */}
           <div className="card">
             <div className="card-head"><span className="card-head-title">💳 Credit Sales</span><span style={{fontWeight:700,color:T.danger}}>{inr(calcs.totalCredit)}</span></div>
             <div style={{overflowX:"auto"}}>
@@ -1069,6 +1585,7 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
             </div>
           </div>
 
+          {/* Bank of Baroda Deposit Card */}
           {num(entry.bob) > 0 && (
             <div className="card" style={{ borderLeft: "4px solid #2563eb", background: "rgba(37,99,235,0.02)" }}>
               <div className="card-head">
@@ -1084,6 +1601,116 @@ export function AdminDayDetail({ entry, commissions, products = PRODUCTS }) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Complete All Financial Transactions Audit Ledger */}
+      <div className="card" style={{ marginTop: 18 }}>
+        <div className="card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+          <div>
+            <span className="card-head-title">📑 All Financial Transactions Audit Journal ({fmtDate(entry.date)})</span>
+            <div style={{ fontSize: 12, color: T.inkLight, marginTop: 2 }}>
+              Detailed ledger of all receipts, sales collections, operating expenses, and bank transfers
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <input
+              type="text"
+              className="inp"
+              placeholder="🔍 Search transactions..."
+              value={txSearch}
+              onChange={(e) => setTxSearch(e.target.value)}
+              style={{ padding: "5px 10px", fontSize: 12, width: 170 }}
+            />
+            <div style={{ display: "flex", gap: 4 }}>
+              {[
+                ["all", `All (${allTransactions.length})`],
+                ["in", `Inflows (+)`],
+                ["out", `Outflows (−)`],
+                ["cash", `Cash Drawer`],
+              ].map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={txFilter === k ? "btn" : "btn-ghost"}
+                  onClick={() => setTxFilter(k)}
+                  style={{ padding: "5px 10px", fontSize: 11, fontWeight: 700 }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th style={{ width: 40, textAlign: "center" }}>#</th>
+                <th>Category</th>
+                <th>Transaction Particulars & Details</th>
+                <th>Party / Source</th>
+                <th style={{ textAlign: "center" }}>Mode</th>
+                <th style={{ textAlign: "right" }}>Inflow (+)</th>
+                <th style={{ textAlign: "right" }}>Outflow (−)</th>
+                <th style={{ textAlign: "right" }}>Cash Drawer Impact</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTransactions.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", padding: "24px 12px", color: T.inkLight }}>
+                    No transactions matching the selected filter.
+                  </td>
+                </tr>
+              ) : (
+                filteredTransactions.map((tx, idx) => (
+                  <tr key={tx.id || idx}>
+                    <td style={{ textAlign: "center", color: T.inkLight, fontSize: 11 }}>{idx + 1}</td>
+                    <td>
+                      <span className={`badge ${tx.badgeClass}`} style={{ fontSize: 10, padding: "3px 7px" }}>
+                        {tx.category}
+                      </span>
+                    </td>
+                    <td style={{ fontWeight: 600, color: T.ink }}>{tx.desc}</td>
+                    <td style={{ color: T.inkMid, fontSize: 12 }}>{tx.party}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: tx.mode === "Cash" ? T.ink : T.blue }}>
+                        {tx.mode}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right", color: T.success, fontWeight: 600 }}>
+                      {tx.flow === "in" ? `+${inr(tx.amount)}` : "—"}
+                    </td>
+                    <td style={{ textAlign: "right", color: T.danger, fontWeight: 600 }}>
+                      {tx.flow === "out" ? `−${inr(tx.amount)}` : "—"}
+                    </td>
+                    <td style={{ textAlign: "right", fontWeight: 700, color: tx.cashImpact > 0 ? T.success : tx.cashImpact < 0 ? T.danger : T.inkLight }}>
+                      {tx.cashImpact > 0 ? `+${inr(tx.cashImpact)}` : tx.cashImpact < 0 ? `−${inr(Math.abs(tx.cashImpact))}` : "0 (Direct Bank)"}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr style={{ background: "#f8fafc", fontWeight: 700, borderTop: `2px solid ${T.border}` }}>
+                <td colSpan={5} style={{ textAlign: "right", textTransform: "uppercase", fontSize: 11, color: T.inkLight }}>
+                  Total Day Cash on Hand:
+                </td>
+                <td style={{ textAlign: "right", color: T.success, fontSize: 13 }}>
+                  +{inr(totalInflows)}
+                </td>
+                <td style={{ textAlign: "right", color: T.danger, fontSize: 13 }}>
+                  −{inr(totalOutflows)}
+                </td>
+                <td style={{ textAlign: "right", color: calcs.cashOnHand < 0 ? T.danger : T.success, fontSize: 15, fontWeight: 800 }}>
+                  {inr(calcs.cashOnHand)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
     </div>
