@@ -8,8 +8,9 @@ import {
 } from "../constants";
 import AdminProductMaster from "./AdminProductMaster";
 import SharedSalaryReport from "./SharedSalaryReport";
+import AdminMonthReports from "./AdminMonthReports";
 
-export { AdminProductMaster, SharedSalaryReport };
+export { AdminProductMaster, SharedSalaryReport, AdminMonthReports };
 
 // Helper to calculate start and end of any month in local time (YYYY-MM-DD)
 const getMonthBounds = (dateObj = new Date()) => {
@@ -765,16 +766,22 @@ export function AdminCommission({ commissions, setCommissions, products = PRODUC
   );
 }
 
-export function AdminDayReports({ entries, commissions, products = PRODUCTS, onNavigate = null }) {
+export function AdminDayReports({ entries, commissions, products = PRODUCTS, onNavigate = null, initialDate = null }) {
   const sorted = [...entries].sort((a,b)=>b.date.localeCompare(a.date));
-  const [selDate, setSelDate] = useState(() => sorted[0]?.date || todayStr());
+  const [selDate, setSelDate] = useState(() => initialDate || sorted[0]?.date || todayStr());
+
+  useEffect(() => {
+    if (initialDate) {
+      setSelDate(initialDate);
+    }
+  }, [initialDate]);
 
   // If selDate is not set or entries list changes, allow smooth sync
   useEffect(() => {
-    if (sorted.length > 0 && !entries.some(e => e.date === selDate)) {
+    if (!initialDate && sorted.length > 0 && !entries.some(e => e.date === selDate)) {
       setSelDate(sorted[0].date);
     }
-  }, [entries]);
+  }, [entries, initialDate]);
 
   const entry = entries.find(e => e.date === selDate);
 

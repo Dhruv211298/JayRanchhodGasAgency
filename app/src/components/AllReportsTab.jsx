@@ -10,6 +10,7 @@ import {
   AuditTrail as ConnectionAuditTrail,
 } from "./ConnectionsTab";
 import { AdminDayReports } from "./AdminSide";
+import AdminMonthReports from "./AdminMonthReports";
 import { Summary as UserSummary } from "./UserSide";
 import SharedSalaryReport from "./SharedSalaryReport";
 
@@ -20,11 +21,14 @@ export default function AllReportsTab({
   commissions = [],
   employees = [],
   products = [],
+  deliveryBoys = [],
+  prices = [],
   onChanged = null,
   onNavigate = null,
 }) {
   const defaultSub = initialSub || (isAdmin ? "day-reports" : "summary");
   const [sub, setSub] = useState(defaultSub);
+  const [selectedDayDate, setSelectedDayDate] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const changed = () => {
@@ -38,6 +42,12 @@ export default function AllReportsTab({
       label: "Day Reports",
       icon: "📊",
       desc: "Daily sales audit, godown inventory movements, delivery boy tallies, and cash-on-hand drawer balances.",
+    },
+    {
+      id: "month-reports",
+      label: "Month Reports",
+      icon: "📅",
+      desc: "Monthly operational rollups, aggregated sales by product, monthly delivery boy tallies, and full-month financial audit.",
     },
     {
       id: "salary",
@@ -89,6 +99,12 @@ export default function AllReportsTab({
       label: "Sales Summary",
       icon: "📊",
       desc: "High-level operational overview of sales turnover, operating expenses, payment methods, and delivery performances.",
+    },
+    {
+      id: "month-reports",
+      label: "Month Reports",
+      icon: "📅",
+      desc: "Monthly operational rollups, aggregated sales by product, monthly delivery boy tallies, and full-month financial audit.",
     },
     {
       id: "salary",
@@ -210,7 +226,23 @@ export default function AllReportsTab({
               entries={entries}
               commissions={commissions}
               products={products}
+              initialDate={selectedDayDate}
               onNavigate={onNavigate}
+            />
+          )}
+
+          {sub === "month-reports" && (
+            <AdminMonthReports
+              entries={entries}
+              commissions={commissions}
+              products={products}
+              deliveryBoys={deliveryBoys}
+              isAdmin={isAdmin}
+              onNavigate={onNavigate}
+              onViewDay={(date) => {
+                setSelectedDayDate(date);
+                setSub(isAdmin ? "day-reports" : "summary");
+              }}
             />
           )}
 

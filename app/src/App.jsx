@@ -639,6 +639,7 @@ export default function App() {
                 entries={entries}
                 employees={employees}
                 products={products}
+                deliveryBoys={deliveryBoys}
                 onChanged={onConnectionsChanged}
                 prices={prices}
                 onNavigate={(targetTab, targetDate) => {
@@ -660,6 +661,7 @@ export default function App() {
                 commissions={commissions}
                 employees={employees}
                 products={products}
+                deliveryBoys={deliveryBoys}
                 onChanged={onConnectionsChanged}
                 prices={prices}
                 onNavigate={(targetTab, targetDate) => {
