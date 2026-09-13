@@ -695,33 +695,21 @@ function AuditTrail() {
 
 /* ══════════════ Tab shell ══════════════ */
 export default function ConnectionsTab({ isAdmin, onChanged }) {
-  const [sub, setSub] = useState("record");
+  const [sub, setSub] = useState("register");
   const [refreshKey, setRefreshKey] = useState(0);
   const changed = () => { setRefreshKey(k => k + 1); onChanged && onChanged(); };
   const SUBS = [
-    ["record", "✍️ Record"],
     ["register", isAdmin ? "📅 Daily Register" : "📅 Today's Register"],
     ...(isAdmin ? [["summary", "📊 Summary & Cylinders in Market"], ["monthly", "📆 Monthly Trend"], ["payments", "💵 Payments Collected"], ["refunds", "↩️ Refunds Paid"], ["audit", "🧾 Audit Trail"]] : []),
   ];
   return (
     <div className="fade-in">
       <div className="alert alert-info" style={{ background: T.blueBg, color: T.blue, border: "1px solid #bfdbfe" }}>
-        No consumer details are entered here — BPCL's system holds the customer master and the deposit record. This screen records only stock movement and money per cylinder category.
+        No consumer details are entered here — BPCL's system holds the customer master and the deposit record. This screen displays connection registers, cylinder reconciliation, and reports. New connections, additional bottles, and surrenders are recorded directly in Daily Entry.
       </div>
       <div className="prod-tabs">
         {SUBS.map(([id, label]) => <button key={id} className={`prod-tab${sub === id ? " active" : ""}`} onClick={() => setSub(id)}>{label}</button>)}
       </div>
-      {sub === "record" && (
-        <div>
-          <div className="g2" style={{ marginBottom: 14, alignItems: "stretch" }}>
-            <NewConnectionForm isAdmin={isAdmin} onDone={changed} />
-            <AdditionalBottleForm isAdmin={isAdmin} onDone={changed} />
-          </div>
-          <SurrenderForm isAdmin={isAdmin} onDone={changed} />
-          <div className="card-head" style={{ background: "transparent", borderBottom: "none", padding: "4px 0" }}><span className="card-head-title">📅 Today's entries</span></div>
-          <Register isAdmin={isAdmin} refreshKey={refreshKey} onChanged={onChanged} />
-        </div>
-      )}
       {sub === "register" && <Register isAdmin={isAdmin} refreshKey={refreshKey} onChanged={onChanged} />}
       {isAdmin && sub === "summary" && <SummaryReport />}
       {isAdmin && sub === "monthly" && <MonthlyReport />}
