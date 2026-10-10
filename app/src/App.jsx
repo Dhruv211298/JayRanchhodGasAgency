@@ -73,6 +73,7 @@ export default function App() {
   const [employees, setEmployees] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [products, setProducts] = useState(PRODUCTS);
+  const [salaryAdjustments, setSalaryAdjustments] = useState([]);
   // Connection-module activity keyed by date — includes days that have no
   // saved daily entry yet, so a blank entry can still pick up its cylinders
   // and cash events. See blankEntry() in constants.js.
@@ -117,6 +118,7 @@ export default function App() {
     setDeliveryBoys(loadedBoys);
     setProducts(loadedProducts);
     setConnectionsByDate(byDate);
+    setSalaryAdjustments(data.salaryAdjustments || []);
 
     // If a specific date was requested (e.g. after saving a backdated entry), restore that date
     const targetDate = restoreDate || todayStr();
@@ -640,6 +642,7 @@ export default function App() {
                 employees={employees}
                 products={products}
                 deliveryBoys={deliveryBoys}
+                salaryAdjustments={salaryAdjustments}
                 onChanged={onConnectionsChanged}
                 prices={prices}
                 onNavigate={(targetTab, targetDate) => {
@@ -662,6 +665,8 @@ export default function App() {
                 employees={employees}
                 products={products}
                 deliveryBoys={deliveryBoys}
+                salaryAdjustments={salaryAdjustments}
+                onSalaryAdjustmentsChanged={loadData}
                 onChanged={onConnectionsChanged}
                 prices={prices}
                 onNavigate={(targetTab, targetDate) => {

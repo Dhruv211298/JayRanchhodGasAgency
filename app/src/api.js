@@ -146,6 +146,16 @@ export const api = {
     authFetch(`${API_URL}/prices/sync`, { method: "POST", body: JSON.stringify(prices) }),
   syncCommissions: async (comms) =>
     authFetch(`${API_URL}/commissions/sync`, { method: "POST", body: JSON.stringify(comms) }),
+  saveSalaryAdjustments: async (adjustments) =>
+    jsonOrThrow(await authFetch(`${API_URL}/salary-adjustments`, {
+      method: "POST",
+      body: JSON.stringify({ adjustments }),
+    })),
+  getSalaryAdjustments: async (month) => {
+    const p = new URLSearchParams({ t: Date.now() });
+    if (month) p.set("month", month);
+    return jsonOrThrow(await authFetch(`${API_URL}/salary-adjustments?${p}`));
+  },
 
   /* ── Products ── */
   getProducts: async () => {

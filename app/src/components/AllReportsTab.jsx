@@ -22,8 +22,10 @@ export default function AllReportsTab({
   employees = [],
   products = [],
   deliveryBoys = [],
+  salaryAdjustments = [],
   prices = [],
   onChanged = null,
+  onSalaryAdjustmentsChanged = null,
   onNavigate = null,
 }) {
   const defaultSub = initialSub || (isAdmin ? "day-reports" : "summary");
@@ -251,7 +253,13 @@ export default function AllReportsTab({
           )}
 
           {sub === "salary" && (
-            <SharedSalaryReport entries={entries} employees={employees} isAdmin={isAdmin} />
+            <SharedSalaryReport
+              entries={entries}
+              employees={employees}
+              salaryAdjustments={salaryAdjustments}
+              onSalaryAdjustmentsChanged={onSalaryAdjustmentsChanged}
+              isAdmin={isAdmin}
+            />
           )}
 
           {sub === "conn-register" && (

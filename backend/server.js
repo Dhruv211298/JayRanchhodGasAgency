@@ -483,6 +483,28 @@ async function runMigrations() {
   } catch (e) {
     console.warn('Migration products warning (non-fatal):', e.message);
   }
+
+  /* Migration 8: salary_adjustments table for monthly leave/absence/settlement deductions. */
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS salary_adjustments (
+        id VARCHAR(64) NOT NULL PRIMARY KEY,
+        employee_id INT NOT NULL,
+        for_month VARCHAR(7) NOT NULL COMMENT 'YYYY-MM',
+        deduction DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'Leave/attendance deduction',
+        addition DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'Bonus/addition',
+        notes VARCHAR(255) DEFAULT '' COMMENT 'Reason e.g. 5 days leave',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_sal_adj (employee_id, for_month),
+        INDEX idx_sal_adj_month (for_month),
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    console.log('Migration: ensured salary_adjustments table exists');
+  } catch (e) {
+    console.warn('Migration salary_adjustments warning (non-fatal):', e.message);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -559,6 +581,25 @@ app.get('/api/load', verifyToken, async (req, res) => {
       console.warn('Salary load fallback (for_month missing?):', salErr.message);
       [salPayRows] = await pool.query(`SELECT sp.id, DATE_FORMAT(sp.entry_date, '%Y-%m-%d') as entry_date, sp.employee_id as employeeId, e.name as employeeName, sp.amount as amt, sp.type, sp.notes FROM employee_payments sp JOIN employees e ON sp.employee_id = e.id`);
     }
+
+    // Load monthly salary adjustments (leave cuts, settlements, etc.)
+    let salaryAdjustments = [];
+    try {
+      const [salAdjRows] = await pool.query(
+        "SELECT id, employee_id as employeeId, for_month as forMonth, deduction, addition, notes FROM salary_adjustments"
+      );
+      salaryAdjustments = (salAdjRows || []).map(r => ({
+        id: r.id,
+        employeeId: r.employeeId,
+        forMonth: r.forMonth,
+        deduction: num(r.deduction),
+        addition: num(r.addition),
+        notes: r.notes || ''
+      }));
+    } catch (adjErr) {
+      console.warn('Salary adjustments load warning:', adjErr.message);
+    }
+
     const [godownRows] = await pool.query("SELECT DATE_FORMAT(entry_date, '%Y-%m-%d') as entry_date, product_id as productId, filled_qty as `filled`, empty_qty as `empty` FROM godown_stock");
     const [arrivalRows] = await pool.query(`SELECT DATE_FORMAT(entry_date, '%Y-%m-%d') as entry_date, product_id as productId, filled_received as filledReceived, empty_returned as emptyReturned FROM vehicle_arrivals`);
     const [accRows] = await pool.query(`SELECT DATE_FORMAT(entry_date, '%Y-%m-%d') as entry_date, accessory_id as accessoryId, qty, rate FROM daily_accessory_sales`);
@@ -730,7 +771,7 @@ app.get('/api/load', verifyToken, async (req, res) => {
       };
     });
 
-    res.json({ products: productsRows, prices: pricesRows, commissions: commRows, boys, employees, vehicles: vehicleRows, pending, entries, connectionsByDate });
+    res.json({ products: productsRows, prices: pricesRows, commissions: commRows, boys, employees, vehicles: vehicleRows, pending, entries, connectionsByDate, salaryAdjustments });
   } catch (error) {
     console.error("Load API Error:", error);
     res.status(500).json({ error: 'Could not load data. Please try again.' });
@@ -1618,6 +1659,81 @@ app.delete('/api/employees/:id', verifyToken, requireAdmin, async (req, res) => 
     }
     console.error('Delete employee error:', error);
     res.status(500).json({ error: 'Could not delete the employee.' });
+  }
+});
+
+/* ════════════════════════════════════════════════════════════════
+   7c. SALARY ADJUSTMENTS (Leave Deductions / Settlements)
+   ════════════════════════════════════════════════════════════════ */
+app.get('/api/salary-adjustments', verifyToken, async (req, res) => {
+  try {
+    const { month } = req.query;
+    let query = 'SELECT id, employee_id as employeeId, for_month as forMonth, deduction, addition, notes FROM salary_adjustments';
+    const params = [];
+    if (month && /^\d{4}-\d{2}$/.test(String(month))) {
+      query += ' WHERE for_month = ?';
+      params.push(month);
+    }
+    const [rows] = await pool.query(query, params);
+    res.json((rows || []).map(r => ({
+      id: r.id,
+      employeeId: r.employeeId,
+      forMonth: r.forMonth,
+      deduction: num(r.deduction),
+      addition: num(r.addition),
+      notes: r.notes || ''
+    })));
+  } catch (error) {
+    console.error('List salary adjustments error:', error);
+    res.status(500).json({ error: 'Could not load salary adjustments.' });
+  }
+});
+
+app.post('/api/salary-adjustments', verifyToken, requireAdmin, async (req, res) => {
+  const { adjustments = [] } = req.body || {};
+  if (!Array.isArray(adjustments)) {
+    return res.status(400).json({ error: 'Adjustments must be a list.' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    for (const adj of adjustments) {
+      if (!adj || !adj.employeeId || !adj.forMonth || !/^\d{4}-\d{2}$/.test(String(adj.forMonth))) {
+        continue;
+      }
+      const empId = Number(adj.employeeId);
+      const forMonth = String(adj.forMonth);
+      const deduction = Math.max(0, num(adj.deduction));
+      const addition = Math.max(0, num(adj.addition));
+      const notes = strField(adj.notes, 255);
+      const id = String(adj.id || `adj-${empId}-${forMonth}`).slice(0, 64);
+
+      if (deduction === 0 && addition === 0 && !notes) {
+        // If reset to 0 with no note, remove row
+        await connection.query(
+          'DELETE FROM salary_adjustments WHERE employee_id = ? AND for_month = ?',
+          [empId, forMonth]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO salary_adjustments (id, employee_id, for_month, deduction, addition, notes)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE deduction = VALUES(deduction), addition = VALUES(addition), notes = VALUES(notes)`,
+          [id, empId, forMonth, deduction, addition, notes]
+        );
+      }
+    }
+
+    await connection.commit();
+    res.json({ success: true, count: adjustments.length });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Save salary adjustments error:', error);
+    res.status(500).json({ error: 'Could not save salary adjustments.' });
+  } finally {
+    connection.release();
   }
 });
 
