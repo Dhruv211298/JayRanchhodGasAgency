@@ -507,6 +507,19 @@ async function runMigrations() {
   }
 }
 
+// Guarantee migrations execute once even in serverless lambda environments
+let migrationsPromise = null;
+function ensureMigrations() {
+  if (!migrationsPromise) {
+    migrationsPromise = runMigrations().catch(err => {
+      console.warn('Migration warning:', err.message);
+      migrationsPromise = null;
+    });
+  }
+  return migrationsPromise;
+}
+ensureMigrations();
+
 /* ════════════════════════════════════════════════════════════════
    1. MASTER LOAD ENDPOINT (Replaces initial dbGet Promise.all)
 ════════════════════════════════════════════════════════════════ */
@@ -1667,6 +1680,7 @@ app.delete('/api/employees/:id', verifyToken, requireAdmin, async (req, res) => 
    ════════════════════════════════════════════════════════════════ */
 app.get('/api/salary-adjustments', verifyToken, async (req, res) => {
   try {
+    await ensureMigrations();
     const { month } = req.query;
     let query = 'SELECT id, employee_id as employeeId, for_month as forMonth, deduction, addition, notes FROM salary_adjustments';
     const params = [];
@@ -1695,15 +1709,25 @@ app.post('/api/salary-adjustments', verifyToken, requireAdmin, async (req, res) 
     return res.status(400).json({ error: 'Adjustments must be a list.' });
   }
 
+  await ensureMigrations();
+
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+
+    // Validate employee IDs against master to guarantee foreign key constraint safety
+    const [empRows] = await connection.query('SELECT id FROM employees');
+    const validEmpIds = new Set((empRows || []).map(e => Number(e.id)));
 
     for (const adj of adjustments) {
       if (!adj || !adj.employeeId || !adj.forMonth || !/^\d{4}-\d{2}$/.test(String(adj.forMonth))) {
         continue;
       }
       const empId = Number(adj.employeeId);
+      if (!validEmpIds.has(empId)) {
+        continue;
+      }
+
       const forMonth = String(adj.forMonth);
       const deduction = Math.max(0, num(adj.deduction));
       const addition = Math.max(0, num(adj.addition));
@@ -1731,7 +1755,7 @@ app.post('/api/salary-adjustments', verifyToken, requireAdmin, async (req, res) 
   } catch (error) {
     await connection.rollback();
     console.error('Save salary adjustments error:', error);
-    res.status(500).json({ error: 'Could not save salary adjustments.' });
+    res.status(500).json({ error: 'Could not save salary adjustments: ' + (error.sqlMessage || error.message || '') });
   } finally {
     connection.release();
   }
