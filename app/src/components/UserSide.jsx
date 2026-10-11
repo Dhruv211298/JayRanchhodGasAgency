@@ -323,8 +323,153 @@ export function ConnectionStockNote({ entry, productId }) {
   );
 }
 
-export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entries, prices, deliveryBoys, vehicles, employees, pending, isAdmin, products = PRODUCTS, onConnectionsChanged }) {
+export function DailyEntry({
+  entry,
+  setEntry,
+  onSave,
+  onDateChange,
+  saved,
+  entries,
+  prices,
+  deliveryBoys,
+  vehicles,
+  employees,
+  pending,
+  isAdmin,
+  products = PRODUCTS,
+  onConnectionsChanged,
+  onRecordPayment,
+  onDeletePayment
+}) {
   const calcs = calcEntry(entry);
+
+  /* ── Return Credit Sale State & Selection ── */
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedPendingId, setSelectedPendingId] = useState("");
+  const [returnAmt, setReturnAmt] = useState("");
+  const [returnEmpty, setReturnEmpty] = useState("");
+  const [returnNote, setReturnNote] = useState("Cash");
+  const [returnSearchText, setReturnSearchText] = useState("");
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+
+  // STRICTLY filter only pending credit sales (remaining balance > 0 OR empty cylinders due > 0)
+  // created on or before the current accounting date
+  const pendingCreditOptions = useMemo(() => {
+    if (!Array.isArray(pending)) return [];
+    const currentDate = entry.date || todayStr();
+
+    return pending
+      .map((p) => {
+        const totalPaid = (p.payments || []).reduce((s, pay) => s + (num(pay.amt) || 0), 0);
+        const remainingAmt = Math.max(0, (num(p.originalAmt) || 0) - totalPaid);
+        const totalEmptyReturned = (p.payments || []).reduce((s, pay) => s + (num(pay.emptyReturned) || 0), 0);
+        const netEmptyDue = Math.max(0, (num(p.filledQty) || 0) - (num(p.emptyQty) || 0) - totalEmptyReturned);
+        const isPending = !p.cleared && (remainingAmt > 0 || netEmptyDue > 0);
+        const isEligibleDate = !p.date || p.date <= currentDate;
+
+        return {
+          ...p,
+          remainingAmt,
+          netEmptyDue,
+          isPending,
+          isEligibleDate,
+        };
+      })
+      .filter((p) => p.isPending && p.isEligibleDate)
+      .sort((a, b) => (b.date || "").localeCompare(a.date || "") || (a.customerName || "").localeCompare(b.customerName || ""));
+  }, [pending, entry.date]);
+
+  const filteredPendingCredits = useMemo(() => {
+    if (!returnSearchText.trim()) return pendingCreditOptions;
+    const q = returnSearchText.trim().toLowerCase();
+    return pendingCreditOptions.filter((p) =>
+      (p.customerName || "").toLowerCase().includes(q) ||
+      (p.remarks || "").toLowerCase().includes(q) ||
+      (p.date || "").includes(q)
+    );
+  }, [pendingCreditOptions, returnSearchText]);
+
+  const selectedCreditItem = useMemo(() => {
+    return pendingCreditOptions.find((p) => p.id === selectedPendingId) || null;
+  }, [pendingCreditOptions, selectedPendingId]);
+
+  const handleOpenReturnModal = () => {
+    setShowReturnModal(true);
+    setSelectedPendingId("");
+    setReturnAmt("");
+    setReturnEmpty("");
+    setReturnNote("Cash");
+    setReturnSearchText("");
+  };
+
+  const handleSelectCredit = (id) => {
+    setSelectedPendingId(id);
+    const item = pendingCreditOptions.find((p) => p.id === id);
+    if (item) {
+      setReturnAmt(item.remainingAmt > 0 ? item.remainingAmt : "");
+      setReturnEmpty(item.netEmptyDue > 0 ? item.netEmptyDue : "");
+    } else {
+      setReturnAmt("");
+      setReturnEmpty("");
+    }
+  };
+
+  const handleSaveReturn = async () => {
+    if (!selectedPendingId) {
+      Swal.fire({ title: "Select Customer", text: "Please select a pending credit customer.", icon: "warning" });
+      return;
+    }
+    const amt = num(returnAmt);
+    const emp = num(returnEmpty);
+    if (amt <= 0 && emp <= 0) {
+      Swal.fire({
+        title: "Enter Amount or Cylinders",
+        text: "Please enter the amount received (₹) and/or empty cylinders returned.",
+        icon: "warning",
+      });
+      return;
+    }
+
+    if (!onRecordPayment) {
+      Swal.fire({ title: "Error", text: "Payment recording handler is not available.", icon: "error" });
+      return;
+    }
+
+    setIsSubmittingReturn(true);
+    try {
+      await onRecordPayment(selectedPendingId, amt, entry.date, returnNote || "Cash", emp);
+      setShowReturnModal(false);
+      setSelectedPendingId("");
+      setReturnAmt("");
+      setReturnEmpty("");
+      setReturnNote("Cash");
+      setReturnSearchText("");
+    } catch (err) {
+      console.error("Save return error:", err);
+    } finally {
+      setIsSubmittingReturn(false);
+    }
+  };
+
+  const handleDeleteReturn = async (item) => {
+    if (!onDeletePayment || !item.paymentId) return;
+    const { value: confirmed } = await Swal.fire({
+      title: "Remove Credit Return?",
+      html: `Delete payment return of <b>${inr(item.amt)}</b> for <b>${item.customerName}</b>?<br/><span style="font-size:12px;color:#64748b">This will reverse this payment and restore the pending balance.</span>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, Delete",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#ef4444",
+      reverseButtons: true,
+    });
+    if (!confirmed) return;
+    try {
+      await onDeletePayment(item.paymentId);
+    } catch (err) {
+      console.error("Delete return error:", err);
+    }
+  };
   const orphanIssues = Object.entries(entry.unrecordedConnectionIssues || {}).filter(([, n]) => num(n) > 0);
   // Replaying the full history to derive the opening empty-cylinder balance is
   // O(days x products). It only changes when the entry list or the working date
@@ -996,44 +1141,102 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
           </div>
         </div>
 
-        <div className="card" style={{ height: "100%" }}>
-          <div className="card-head">
-            <span className="card-head-title">💵 Credit Sale Return Received</span>
+        <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+          <div className="card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span className="card-head-title">💵 Credit Sale Return Received</span>
+              {canEdit && (
+                <button
+                  type="button"
+                  className="btn-add"
+                  style={{ padding: "4px 10px", fontSize: 11, margin: 0, width: "auto" }}
+                  onClick={handleOpenReturnModal}
+                >
+                  + Add Return
+                </button>
+              )}
+            </div>
             <span style={{ fontWeight: 700, color: T.success, fontSize: 13 }}>{inr(calcs.totalCreditRecoveries)}</span>
           </div>
-          <div className="card-body" style={{ padding: 0 }}>
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th style={{ width: "40%" }}>Customer Name</th>
-                  <th style={{ textAlign: "right" }}>Amount</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(entry.creditRecoveries || []).map((x, idx) => (
-                  <tr key={idx}>
-                    <td style={{ fontWeight: 600, color: T.accent }}>{x.customerName}</td>
-                    <td style={{ fontWeight: 600, color: T.success, textAlign: "right" }}>{inr(x.amt)}</td>
-                    <td style={{ color: T.inkLight, fontSize: 12 }}>{x.note || "—"}</td>
-                  </tr>
-                ))}
-                {!(entry.creditRecoveries || []).length && (
+          <div className="card-body" style={{ padding: 0, flex: 1, display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1, overflowX: "auto" }}>
+              <table className="tbl">
+                <thead>
                   <tr>
-                    <td colSpan={3} style={{ textAlign: "center", padding: "16px 10px", color: T.inkLight }}>
-                      No credit returns received today.
-                    </td>
+                    <th style={{ width: "38%" }}>Customer Name</th>
+                    <th style={{ textAlign: "right", width: "20%" }}>Amount</th>
+                    <th style={{ textAlign: "center", width: "18%" }}>Empties</th>
+                    <th>Notes</th>
+                    {canEdit && <th style={{ width: 36 }}></th>}
                   </tr>
-                )}
-                {!!(entry.creditRecoveries || []).length && (
-                  <tr className="tbl-total">
-                    <td style={{ color: T.inkMid, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>Total</td>
-                    <td style={{ color: T.success, textAlign: "right" }}>{inr(calcs.totalCreditRecoveries)}</td>
-                    <td></td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(entry.creditRecoveries || []).map((x, idx) => (
+                    <tr key={x.paymentId || idx}>
+                      <td>
+                        <span style={{ fontWeight: 600, color: T.accent }}>{x.customerName}</span>
+                        {x.productId && (
+                          <span style={{ fontSize: 10, color: T.inkMid, marginLeft: 6, background: "#f1f5f9", padding: "1px 5px", borderRadius: 4 }}>
+                            {productLabel(x.productId, products)}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ fontWeight: 600, color: T.success, textAlign: "right" }}>{inr(x.amt)}</td>
+                      <td style={{ textAlign: "center" }}>
+                        {num(x.emptyReturned) > 0 ? (
+                          <span style={{ color: "#d97706", fontWeight: 700, fontSize: 11, background: "#fffbeb", padding: "2px 6px", borderRadius: 4 }}>
+                            ↑ {x.emptyReturned} Cyl
+                          </span>
+                        ) : (
+                          <span style={{ color: T.inkLight, fontSize: 11 }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ color: T.inkLight, fontSize: 12 }}>{x.note || "—"}</td>
+                      {canEdit && (
+                        <td style={{ width: 36, textAlign: "center" }}>
+                          {x.paymentId && onDeletePayment && (
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              title="Delete this return"
+                              onClick={() => handleDeleteReturn(x)}
+                              style={{ color: T.danger }}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {!(entry.creditRecoveries || []).length && (
+                    <tr>
+                      <td colSpan={canEdit ? 5 : 4} style={{ textAlign: "center", padding: "16px 10px", color: T.inkLight }}>
+                        No credit returns received today.
+                      </td>
+                    </tr>
+                  )}
+                  {!!(entry.creditRecoveries || []).length && (
+                    <tr className="tbl-total">
+                      <td style={{ color: T.inkMid, fontSize: 11, textTransform: "uppercase", letterSpacing: 1 }}>Total</td>
+                      <td style={{ color: T.success, textAlign: "right", fontWeight: 700 }}>{inr(calcs.totalCreditRecoveries)}</td>
+                      <td style={{ textAlign: "center", color: "#d97706", fontWeight: 700, fontSize: 11 }}>
+                        {(() => {
+                          const totEmp = (entry.creditRecoveries || []).reduce((s, x) => s + (num(x.emptyReturned) || 0), 0);
+                          return totEmp > 0 ? `↑ ${totEmp}` : "—";
+                        })()}
+                      </td>
+                      <td colSpan={canEdit ? 2 : 1}></td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {canEdit && (
+              <div style={{ padding: "6px 10px 10px" }}>
+                <button type="button" className="btn-add" onClick={handleOpenReturnModal}>+ Add Credit Return</button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1479,6 +1682,272 @@ export function DailyEntry({ entry, setEntry, onSave, onDateChange, saved, entri
           >
             <span>💾</span> SAVE TODAY'S ENTRY
           </button>
+        </div>
+      )}
+
+      {/* Record Credit Sale Return Modal */}
+      {showReturnModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15, 23, 42, 0.6)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div style={{
+            background: T.card,
+            borderRadius: 14,
+            padding: "24px 26px",
+            width: "100%",
+            maxWidth: 500,
+            boxShadow: T.shadowLg,
+            border: `1px solid ${T.border}`,
+            maxHeight: "90vh",
+            overflowY: "auto"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div>
+                <h3 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 18, fontWeight: 700, color: T.ink, margin: 0 }}>
+                  💵 Record Credit Sale Return
+                </h3>
+                <div style={{ fontSize: 12, color: T.inkLight, marginTop: 3 }}>
+                  Select a pending credit customer to record received payment & empty cylinders for {fmtDate(entry.date)}.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-icon"
+                style={{ fontSize: 18, color: T.inkLight }}
+                onClick={() => setShowReturnModal(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            {pendingCreditOptions.length === 0 ? (
+              <div style={{ background: "#f8fafc", border: `1px solid ${T.border}`, borderRadius: 10, padding: 20, textAlign: "center", margin: "16px 0" }}>
+                <div style={{ fontSize: 24, marginBottom: 6 }}>🎉</div>
+                <div style={{ fontWeight: 600, color: T.ink, fontSize: 14 }}>No Pending Credit Sales</div>
+                <div style={{ fontSize: 12, color: T.inkLight, marginTop: 4 }}>
+                  All credit sales up to {fmtDate(entry.date)} are already fully settled.
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="field" style={{ marginTop: 14 }}>
+                  <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Pending Credit Customer <span style={{ color: T.danger }}>*</span></span>
+                    <span style={{ fontSize: 11, color: T.inkLight, fontWeight: 400 }}>
+                      {pendingCreditOptions.length} pending account{pendingCreditOptions.length > 1 ? "s" : ""}
+                    </span>
+                  </label>
+
+                  {pendingCreditOptions.length > 5 && (
+                    <input
+                      type="text"
+                      className="inp"
+                      placeholder="🔍 Type to filter customer name..."
+                      value={returnSearchText}
+                      onChange={(e) => setReturnSearchText(e.target.value)}
+                      style={{ marginBottom: 8, fontSize: 12.5 }}
+                    />
+                  )}
+
+                  <select
+                    className="inp"
+                    value={selectedPendingId}
+                    onChange={(e) => handleSelectCredit(e.target.value)}
+                    style={{ fontWeight: 600, fontSize: 13 }}
+                  >
+                    <option value="">-- Choose Pending Credit Sale ({filteredPendingCredits.length} available) --</option>
+                    {filteredPendingCredits.map((p) => {
+                      const prod = (products || PRODUCTS).find(x => x.id === p.productId);
+                      const prodTxt = prod ? (prod.short || prod.label) : p.productId;
+                      const empTxt = p.netEmptyDue > 0 ? ` · ${p.netEmptyDue} empty due` : "";
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.customerName} — Due: ₹{p.remainingAmt}{empTxt} (Credit: {fmtDate(p.date)}{prodTxt ? `, ${prodTxt}` : ""})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {selectedCreditItem && (
+                  <div style={{
+                    background: "#f8fafc",
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 10,
+                    padding: "12px 14px",
+                    margin: "14px 0",
+                    fontSize: 12
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, borderBottom: `1px solid ${T.border}`, paddingBottom: 6 }}>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: T.accent }}>
+                        {selectedCreditItem.customerName}
+                      </span>
+                      <span style={{ fontSize: 11, color: T.inkMid, background: "#fff", padding: "2px 8px", borderRadius: 4, border: `1px solid ${T.border}` }}>
+                        Credit Date: <strong>{fmtDate(selectedCreditItem.date)}</strong>
+                      </span>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 14px" }}>
+                      <div>
+                        <span style={{ color: T.inkLight }}>Product:</span>{" "}
+                        <strong style={{ color: T.inkMid }}>{productLabel(selectedCreditItem.productId, products)}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: T.inkLight }}>Original Credit:</span>{" "}
+                        <strong style={{ color: T.inkMid }}>{inr(selectedCreditItem.originalAmt)}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: T.inkLight }}>Remaining Due:</span>{" "}
+                        <strong style={{ color: selectedCreditItem.remainingAmt > 0 ? T.danger : T.success, fontSize: 13 }}>
+                          {inr(selectedCreditItem.remainingAmt)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span style={{ color: T.inkLight }}>Empty Cylinders Due:</span>{" "}
+                        <strong style={{ color: selectedCreditItem.netEmptyDue > 0 ? "#d97706" : T.success }}>
+                          {selectedCreditItem.netEmptyDue > 0 ? `${selectedCreditItem.netEmptyDue} cyl` : "0 (Cleared)"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {selectedCreditItem.remarks && (
+                      <div style={{ marginTop: 8, paddingTop: 6, borderTop: `1px dashed ${T.border}`, color: T.inkMid, fontStyle: "italic", fontSize: 11.5 }}>
+                        📝 Original note: {selectedCreditItem.remarks}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <label style={{ margin: 0 }}>Amount Received (₹)</label>
+                      {selectedCreditItem && selectedCreditItem.remainingAmt > 0 && (
+                        <button
+                          type="button"
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: T.blue,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            padding: 0
+                          }}
+                          onClick={() => setReturnAmt(selectedCreditItem.remainingAmt)}
+                        >
+                          ⚡ Full ({selectedCreditItem.remainingAmt})
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      className="inp"
+                      type="number"
+                      placeholder="0"
+                      value={returnAmt}
+                      onChange={(e) => setReturnAmt(e.target.value)}
+                      style={{ fontWeight: 700, fontSize: 14, color: T.success }}
+                    />
+                  </div>
+
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <label style={{ margin: 0 }}>Empties Returned</label>
+                      {selectedCreditItem && selectedCreditItem.netEmptyDue > 0 && (
+                        <button
+                          type="button"
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#d97706",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            padding: 0
+                          }}
+                          onClick={() => setReturnEmpty(selectedCreditItem.netEmptyDue)}
+                        >
+                          ⚡ All ({selectedCreditItem.netEmptyDue})
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      className="inp"
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={returnEmpty}
+                      onChange={(e) => setReturnEmpty(e.target.value)}
+                      style={{ fontWeight: 700, fontSize: 14, color: "#d97706" }}
+                    />
+                  </div>
+                </div>
+
+                <div className="field" style={{ marginTop: 12 }}>
+                  <label>Payment Mode / Note</label>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                    {["Cash", "GPay / UPI", "Cheque", "Bank Transfer"].map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setReturnNote(mode)}
+                        style={{
+                          border: `1px solid ${returnNote === mode ? T.accent : T.border}`,
+                          background: returnNote === mode ? T.accentBg : "#fff",
+                          color: returnNote === mode ? T.accent : T.inkMid,
+                          borderRadius: 6,
+                          padding: "3px 10px",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className="inp"
+                    type="text"
+                    placeholder="e.g. Cash, GPay, Cheque #12345"
+                    value={returnNote}
+                    onChange={(e) => setReturnNote(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ flex: 1 }}
+                onClick={() => setShowReturnModal(false)}
+                disabled={isSubmittingReturn}
+              >
+                Cancel
+              </button>
+              {pendingCreditOptions.length > 0 && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ flex: 2 }}
+                  onClick={handleSaveReturn}
+                  disabled={isSubmittingReturn || !selectedPendingId || (num(returnAmt) <= 0 && num(returnEmpty) <= 0)}
+                >
+                  {isSubmittingReturn ? "Saving..." : "Save Return Entry"}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

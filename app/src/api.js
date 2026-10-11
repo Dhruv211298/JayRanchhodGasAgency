@@ -124,6 +124,12 @@ export const api = {
     });
     return await jsonOrThrow(res);
   },
+  deletePayment: async (paymentId) => {
+    const res = await authFetch(`${API_URL}/payments/${paymentId}`, {
+      method: "DELETE",
+    });
+    return await jsonOrThrow(res);
+  },
 
   /* ── Password management ── */
   changeMyPassword: async (currentPassword, newPassword) => {

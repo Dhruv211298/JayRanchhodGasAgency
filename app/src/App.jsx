@@ -27,6 +27,7 @@ const getRecoveriesForDate = (date, pendingList) => {
     (p.payments || []).forEach(pay => {
       if (pay.date === date) {
         recoveries.push({
+          paymentId: pay.id,
           ledgerId: p.id,
           customerName: p.customerName,
           productId: p.productId,
@@ -261,6 +262,30 @@ export default function App() {
       Swal.fire({
         title: "Payment Not Saved",
         text: error.message || "Could not record the payment.",
+        icon: "error",
+        confirmButtonColor: "#ef4444",
+      });
+      throw error;
+    }
+  };
+
+  /* ── delete a recovery payment ── */
+  const deletePayment = async (paymentId) => {
+    try {
+      await api.deletePayment(paymentId);
+      await loadData(entry.date);
+      Swal.fire({
+        title: "Deleted",
+        text: "The credit return entry has been removed.",
+        icon: "success",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      if (error.message === "session_expired" || error.forbidden) return;
+      Swal.fire({
+        title: "Delete Failed",
+        text: error.message || "Could not delete payment.",
         icon: "error",
         confirmButtonColor: "#ef4444",
       });
@@ -631,7 +656,7 @@ export default function App() {
             transition={{ duration: 0.18, ease: "easeOut" }}
           >
             {/* User Tabs */}
-            {tab === "entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} products={products} onConnectionsChanged={onConnectionsChanged} isAdmin={false} />}
+            {tab === "entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} products={products} onConnectionsChanged={onConnectionsChanged} onRecordPayment={recordPayment} onDeletePayment={deletePayment} isAdmin={false} />}
             {tab === "history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("entry"); }} products={products} />}
             {tab === "credits" && <PendingCredits pending={pending} onRecord={recordPayment} products={products} />}
             {(tab === "reports" || tab === "connections" || tab === "summary" || tab === "salary") && (
@@ -653,7 +678,7 @@ export default function App() {
             )}
 
             {/* Admin Tabs */}
-            {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} onConnectionsChanged={onConnectionsChanged} />}
+            {tab === "admin-entry" && <DailyEntry entry={entry} setEntry={setEntry} calcs={calcs} onSave={handleSave} onDateChange={handleDateChange} saved={saved} entries={entries} prices={prices} deliveryBoys={deliveryBoys} vehicles={vehicles} employees={employees} pending={pending} isAdmin={true} products={products} onConnectionsChanged={onConnectionsChanged} onRecordPayment={recordPayment} onDeletePayment={deletePayment} />}
             {tab === "admin-history" && <History entries={entries} onEdit={(e) => { setEntry(e); setTab("admin-entry"); }} isAdmin={true} onDelete={handleDeleteEntry} products={products} />}
             {tab === "admin-dashboard" && <AdminDashboard entries={entries} pending={pending} prices={prices} commissions={commissions} products={products} onViewDay={(e) => { setEntry(e); setTab("admin-entry"); }} />}
             {(tab === "admin-reports" || tab === "admin-connections" || tab === "admin-salary" || tab === "admin-all-reports") && (

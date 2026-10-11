@@ -554,13 +554,13 @@ app.get('/api/load', verifyToken, async (req, res) => {
     // 5. Load Pending Credits
     const [ledgerRows] = await pool.query(`SELECT id, DATE_FORMAT(entry_date, '%Y-%m-%d') as date, customer_name as customerName, original_amount as originalAmt, cleared, COALESCE(product_id, '') as productId, COALESCE(filled_qty, 0) as filledQty, COALESCE(empty_qty, 0) as emptyQty, COALESCE(remarks, '') as remarks FROM credit_ledger`);
     const [paymentRows] = await pool.query(`
-      SELECT p.ledger_id, DATE_FORMAT(p.payment_date, '%Y-%m-%d') as date, p.amount as amt, p.note, COALESCE(p.empty_returned, 0) as emptyReturned, l.customer_name as customerName, COALESCE(l.product_id, 'p14') as productId
+      SELECT p.id, p.ledger_id, DATE_FORMAT(p.payment_date, '%Y-%m-%d') as date, p.amount as amt, p.note, COALESCE(p.empty_returned, 0) as emptyReturned, l.customer_name as customerName, COALESCE(l.product_id, 'p14') as productId
       FROM credit_payments p 
       LEFT JOIN credit_ledger l ON p.ledger_id = l.id
     `);
     
     const pending = ledgerRows.map(l => {
-      const payments = paymentRows.filter(p => p.ledger_id === l.id).map(p => ({ date: p.date, amt: num(p.amt), note: p.note, emptyReturned: num(p.emptyReturned) }));
+      const payments = paymentRows.filter(p => p.ledger_id === l.id).map(p => ({ id: p.id, date: p.date, amt: num(p.amt), note: p.note, emptyReturned: num(p.emptyReturned) }));
       const recovered = payments.reduce((sum, p) => sum + num(p.amt), 0);
       return {
         id: l.id,
@@ -735,6 +735,7 @@ app.get('/api/load', verifyToken, async (req, res) => {
       const vehicleExpenses = get(vehExpByDate, date).map(x => ({ id: x.id, vehicleId: x.vehicleId || '', vehicleNo: x.vehicleNo || '', expType: x.expType || 'Fuel', desc: x.desc || '', amt: x.amt || '' }));
       const salaryPayments = get(salPayByDate, date).map(x => ({ id: x.id, employeeId: x.employeeId, employeeName: x.employeeName, amt: x.amt || "", type: x.type, notes: x.notes || "", forMonth: x.forMonth || null }));
       const creditRecoveries = get(paymentsByDate, date).map(p => ({
+        paymentId: p.id,
         ledgerId: p.ledger_id,
         customerName: p.customerName || "UNKNOWN",
         productId: p.productId,
@@ -1218,6 +1219,44 @@ app.post('/api/payments', verifyToken, async (req, res) => {
     }
     console.error('Payment Error:', error);
     res.status(500).json({ error: 'Could not record the payment. Nothing was saved.' });
+  } finally {
+    connection.release();
+  }
+});
+
+app.delete('/api/payments/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: 'Payment id is required.' });
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [rows] = await connection.query('SELECT ledger_id FROM credit_payments WHERE id = ? FOR UPDATE', [id]);
+    if (rows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Payment record not found.' });
+    }
+    const ledgerId = rows[0].ledger_id;
+
+    await connection.query('DELETE FROM credit_payments WHERE id = ?', [id]);
+
+    // Recalculate cleared status for the parent credit ledger row
+    const [ledger] = await connection.query('SELECT original_amount FROM credit_ledger WHERE id = ?', [ledgerId]);
+    if (ledger.length > 0) {
+      const [sumRows] = await connection.query(
+        'SELECT COALESCE(SUM(amount), 0) AS total FROM credit_payments WHERE ledger_id = ?', [ledgerId]
+      );
+      const cleared = num(sumRows[0].total) >= num(ledger[0].original_amount) ? 1 : 0;
+      await connection.query('UPDATE credit_ledger SET cleared = ? WHERE id = ?', [cleared, ledgerId]);
+    }
+
+    await connection.commit();
+    res.json({ success: true });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Delete payment error:', error);
+    res.status(500).json({ error: 'Could not delete payment.' });
   } finally {
     connection.release();
   }
