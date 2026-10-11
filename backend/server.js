@@ -1195,12 +1195,12 @@ app.post('/api/payments', verifyToken, async (req, res) => {
       return res.json({ success: true, duplicate: true });
     }
 
-    const paymentId = crypto.randomBytes(8).toString('hex');
-    await connection.query(
-      `INSERT INTO credit_payments (id, ledger_id, payment_date, amount, note, empty_returned, idempotency_key)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [paymentId, ledgerId, date, num(amt), note || '', num(emptyReturned), key]
+    const [insertResult] = await connection.query(
+      `INSERT INTO credit_payments (ledger_id, payment_date, amount, note, empty_returned, idempotency_key)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [ledgerId, date, num(amt), note || '', num(emptyReturned), key]
     );
+    const paymentId = insertResult.insertId;
 
     // Recompute clearance from the authoritative sum inside the same transaction.
     const [payments] = await connection.query(
@@ -1210,7 +1210,7 @@ app.post('/api/payments', verifyToken, async (req, res) => {
     await connection.query('UPDATE credit_ledger SET cleared = ? WHERE id = ?', [cleared, ledgerId]);
 
     await connection.commit();
-    res.json({ success: true, cleared: !!cleared, recovered: num(payments[0].total) });
+    res.json({ success: true, paymentId, cleared: !!cleared, recovered: num(payments[0].total) });
   } catch (error) {
     await connection.rollback();
     if (error.code === 'ER_DUP_ENTRY') {
