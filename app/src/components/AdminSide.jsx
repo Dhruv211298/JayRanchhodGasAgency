@@ -9,8 +9,9 @@ import {
 import AdminProductMaster from "./AdminProductMaster";
 import SharedSalaryReport from "./SharedSalaryReport";
 import AdminMonthReports from "./AdminMonthReports";
+import AdminDashboardReportModal from "./AdminDashboardReportModal";
 
-export { AdminProductMaster, SharedSalaryReport, AdminMonthReports };
+export { AdminProductMaster, SharedSalaryReport, AdminMonthReports, AdminDashboardReportModal };
 
 // Helper to calculate start and end of any month in local time (YYYY-MM-DD)
 const getMonthBounds = (dateObj = new Date()) => {
@@ -28,6 +29,7 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
   const currentMonthRange = getMonthBounds(new Date());
   const [fromDate, setFromDate] = useState(currentMonthRange.start);
   const [toDate, setToDate] = useState(currentMonthRange.end);
+  const [activeReportModal, setActiveReportModal] = useState(null); // "turnover" | "cylinders" | "expenses" | "commission" | "profit" | "credit" | "bob"
 
   // Quick preset setters
   const setThisMonth = () => {
@@ -335,8 +337,18 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
       {/* KPI Cards Row */}
       <div className="stat-row" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", marginBottom: 16 }}>
         {/* Total Sales / Turnover */}
-        <div className="stat-card" style={{ "--kpi-color": T.blue }}>
-          <div className="stat-val" style={{ color: T.blue }}>{inr(mGrossSales)}</div>
+        <div
+          className="stat-card"
+          style={{ "--kpi-color": T.blue, cursor: "pointer", transition: "all 0.18s ease" }}
+          onClick={() => setActiveReportModal("turnover")}
+          title="Click to view Turnover & Sales group-wise report"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="stat-val" style={{ color: T.blue }}>{inr(mGrossSales)}</div>
+            <span style={{ fontSize: 10, background: "rgba(37, 99, 235, 0.08)", color: T.blue, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              📊 Report ↗
+            </span>
+          </div>
           <div className="stat-lbl">Turnover (Sales)</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>
             Cylinders: {inr(mCylSales)} · Acc: {inr(mAccSales)}
@@ -349,15 +361,35 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         </div>
 
         {/* Cylinders Sold */}
-        <div className="stat-card" style={{ "--kpi-color": "#0ea5e9" }}>
-          <div className="stat-val" style={{ color: "#0ea5e9" }}>{mCylinders}</div>
+        <div
+          className="stat-card"
+          style={{ "--kpi-color": "#0ea5e9", cursor: "pointer", transition: "all 0.18s ease" }}
+          onClick={() => setActiveReportModal("cylinders")}
+          title="Click to view Cylinders Sold group-wise report"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="stat-val" style={{ color: "#0ea5e9" }}>{mCylinders}</div>
+            <span style={{ fontSize: 10, background: "rgba(14, 165, 233, 0.08)", color: "#0ea5e9", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              📊 Report ↗
+            </span>
+          </div>
           <div className="stat-lbl">Cylinders Sold</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>In selected range</div>
         </div>
 
         {/* Total Operating Expenses */}
-        <div className="stat-card" style={{ "--kpi-color": T.danger }}>
-          <div className="stat-val" style={{ color: T.danger }}>{inr(mTotalExpenses)}</div>
+        <div
+          className="stat-card"
+          style={{ "--kpi-color": T.danger, cursor: "pointer", transition: "all 0.18s ease" }}
+          onClick={() => setActiveReportModal("expenses")}
+          title="Click to view Expenses group-wise report (VC Hapto, etc.)"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="stat-val" style={{ color: T.danger }}>{inr(mTotalExpenses)}</div>
+            <span style={{ fontSize: 10, background: "rgba(239, 68, 68, 0.08)", color: T.danger, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              📊 Report ↗
+            </span>
+          </div>
           <div className="stat-lbl">Total Expenses</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }} title={`General: ${inr(mGeneralExpenses)} | Vehicles: ${inr(mVehicleExpenses)} | Salaries: ${inr(mSalaryExpenses)}${mSalaryBreakdown.advance > 0 && mSalaryBreakdown.salary > 0 ? ` (Adv: ${inr(mSalaryBreakdown.advance)} + Sal: ${inr(mSalaryBreakdown.salary)})` : ""}`}>
             Gen: {inr(mGeneralExpenses)} · Veh: {inr(mVehicleExpenses)} · Sal: {inr(mSalaryExpenses)}
@@ -365,20 +397,42 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         </div>
 
         {/* Agency Commission */}
-        <div className="stat-card" style={{ "--kpi-color": T.accent }}>
-          <div className="stat-val" style={{ color: T.accent }}>{inr(mCommission)}</div>
+        <div
+          className="stat-card"
+          style={{ "--kpi-color": T.accent, cursor: "pointer", transition: "all 0.18s ease" }}
+          onClick={() => setActiveReportModal("commission")}
+          title="Click to view Commission group-wise report"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="stat-val" style={{ color: T.accent }}>{inr(mCommission)}</div>
+            <span style={{ fontSize: 10, background: "rgba(234, 88, 12, 0.08)", color: T.accent, padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              📊 Report ↗
+            </span>
+          </div>
           <div className="stat-lbl">Cylinder Commission</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>BPCL Commission Income</div>
         </div>
 
         {/* REAL PROFIT */}
-        <div className="stat-card" style={{ 
-          "--kpi-color": mRealProfit >= 0 ? T.success : T.danger,
-          background: mRealProfit >= 0 ? "rgba(16,185,129,0.04)" : "rgba(239,68,68,0.04)",
-          border: `1.5px solid ${mRealProfit >= 0 ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`
-        }}>
-          <div className="stat-val" style={{ color: mRealProfit >= 0 ? T.success : T.danger, fontWeight: 800 }}>
-            {mRealProfit >= 0 ? "+" : "−"}{inr(Math.abs(mRealProfit))}
+        <div
+          className="stat-card"
+          style={{ 
+            "--kpi-color": mRealProfit >= 0 ? T.success : T.danger,
+            background: mRealProfit >= 0 ? "rgba(16,185,129,0.04)" : "rgba(239,68,68,0.04)",
+            border: `1.5px solid ${mRealProfit >= 0 ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`,
+            cursor: "pointer",
+            transition: "all 0.18s ease"
+          }}
+          onClick={() => setActiveReportModal("profit")}
+          title="Click to view Real Profit (P&L) executive report"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="stat-val" style={{ color: mRealProfit >= 0 ? T.success : T.danger, fontWeight: 800 }}>
+              {mRealProfit >= 0 ? "+" : "−"}{inr(Math.abs(mRealProfit))}
+            </div>
+            <span style={{ fontSize: 10, background: mRealProfit >= 0 ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", color: mRealProfit >= 0 ? "#047857" : "#b91c1c", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              📊 Report ↗
+            </span>
           </div>
           <div className="stat-lbl" style={{ fontWeight: 800, color: mRealProfit >= 0 ? "#047857" : "#b91c1c" }}>
             ✨ REAL PROFIT {mRealProfit >= 0 ? "(Net)" : "(Loss)"}
@@ -389,15 +443,35 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
         </div>
 
         {/* Outstanding Credit */}
-        <div className="stat-card" style={{ "--kpi-color": "#f59e0b" }}>
-          <div className="stat-val" style={{ color: "#d97706" }}>{inr(outstanding)}</div>
+        <div
+          className="stat-card"
+          style={{ "--kpi-color": "#f59e0b", cursor: "pointer", transition: "all 0.18s ease" }}
+          onClick={() => setActiveReportModal("credit")}
+          title="Click to view Outstanding Credit customer ledger report"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="stat-val" style={{ color: "#d97706" }}>{inr(outstanding)}</div>
+            <span style={{ fontSize: 10, background: "rgba(217, 119, 6, 0.08)", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              📊 Report ↗
+            </span>
+          </div>
           <div className="stat-lbl">Outstanding Credit</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>Total Pending All-Time</div>
         </div>
 
         {/* BOB Bank Deposit */}
-        <div className="stat-card" style={{ "--kpi-color": "#2563eb" }}>
-          <div className="stat-val" style={{ color: "#2563eb" }}>{inr(mBobDeposit)}</div>
+        <div
+          className="stat-card"
+          style={{ "--kpi-color": "#2563eb", cursor: "pointer", transition: "all 0.18s ease" }}
+          onClick={() => setActiveReportModal("bob")}
+          title="Click to view BOB Bank Deposit report"
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="stat-val" style={{ color: "#2563eb" }}>{inr(mBobDeposit)}</div>
+            <span style={{ fontSize: 10, background: "rgba(37, 99, 235, 0.08)", color: "#2563eb", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              📊 Report ↗
+            </span>
+          </div>
           <div className="stat-lbl">BOB Bank Deposit</div>
           <div className="stat-delta" style={{ color: T.inkLight, fontSize: 10 }}>Bank of Baroda Deposits</div>
         </div>
@@ -583,6 +657,22 @@ export function AdminDashboard({ entries = [], pending = [], prices = [], commis
           </table>
         </div>
       </div>
+
+      {/* Interactive Detail Report Modal for Clicked KPI Card */}
+      {activeReportModal && (
+        <AdminDashboardReportModal
+          type={activeReportModal}
+          onClose={() => setActiveReportModal(null)}
+          rangeEntries={rangeEntries}
+          fromDate={fromDate}
+          toDate={toDate}
+          rangeLabel={rangeLabel}
+          products={products}
+          commissions={commissions}
+          pending={pending}
+          onViewDay={onViewDay}
+        />
+      )}
     </div>
   );
 }
